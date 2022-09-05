@@ -72,25 +72,37 @@ const BUFFER_PERIOD_MS = 80 * 1000;
 // keepAlive is successful but the server /sync fails.
 const FAILED_SYNC_ERROR_THRESHOLD = 3;
 
-export enum SyncState {
+// Q: This definition looks like an enum - why not use an enum for SyncState?
+// A: `null` is a valid subtype of `SyncState`; TypeScript enums with values do
+// not support a case with a null value.
+export type SyncState =
+    | "ERROR"
+    | "PREPARED"
+    | "STOPPED"
+    | "SYNCING"
+    | "CATCHUP"
+    | "RECONNECTING"
+    | null;
+export const SyncState = {
     /** Emitted after we try to sync more than `FAILED_SYNC_ERROR_THRESHOLD`
      * times and are still failing. Or when we enounter a hard error like the
      * token being invalid. */
-    Error = "ERROR",
+    Error: "ERROR" as SyncState,
     /** Emitted after the first sync events are ready (this could even be sync
      * events from the cache) */
-    Prepared = "PREPARED",
+    Prepared: "PREPARED" as SyncState,
     /** Emitted when the sync loop is no longer running */
-    Stopped = "STOPPED",
+    Stopped: "STOPPED" as SyncState,
     /** Emitted after each sync request happens */
-    Syncing = "SYNCING",
+    Syncing: "SYNCING" as SyncState,
     /** Emitted after a connectivity error and we're ready to start syncing again */
-    Catchup = "CATCHUP",
+    Catchup: "CATCHUP" as SyncState,
     /** Emitted for each time we try reconnecting. Will switch to `Error` after
      * we reach the `FAILED_SYNC_ERROR_THRESHOLD`
      */
-    Reconnecting = "RECONNECTING",
-}
+    Reconnecting: "RECONNECTING" as SyncState,
+    Null: null as SyncState,
+} as const;
 
 // Room versions where "insertion", "batch", and "marker" events are controlled
 // by power-levels. MSC2716 is supported in existing room versions but they
