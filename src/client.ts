@@ -7052,10 +7052,14 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
      * unknown by the server - the caller is responsible for managing logout
      * actions on error.
      * @param {string} refreshToken The refresh token.
+     * @param {string} options.forcePrefixV1 If true, uses /v1 instead of the
+     *     specced /v3; useful when targeting Synapse v1.71.0 and below.
      * @return {Promise<IRefreshTokenResponse>} Resolves to the new token.
      * @return {module:http-api.MatrixError} Rejects with an error response.
      */
-    public refreshToken(refreshToken: string): Promise<IRefreshTokenResponse> {
+    public refreshToken(refreshToken: string, options: {
+      forcePrefixV1?: boolean;
+    } = {}): Promise<IRefreshTokenResponse> {
         return this.http.authedRequest(
             undefined,
             Method.Post,
@@ -7063,7 +7067,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             undefined,
             { refresh_token: refreshToken },
             {
-                prefix: PREFIX_V3,
+                prefix: options.forcePrefixV1 ? PREFIX_V1 : PREFIX_V3,
                 inhibitLogoutEmit: true, // we don't want to cause logout loops
             },
         );
