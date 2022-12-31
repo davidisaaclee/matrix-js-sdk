@@ -7063,7 +7063,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             undefined,
             { refresh_token: refreshToken },
             {
-                prefix: PREFIX_V1,
+                prefix: PREFIX_V3,
                 inhibitLogoutEmit: true, // we don't want to cause logout loops
             },
         );
