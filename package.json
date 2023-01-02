@@ -34,6 +34,7 @@
     ],
     "main": "./src/index.ts",
     "browser": "./lib/browser-index.js",
+    "types": "./lib/browser-index.d.ts",
     "matrix_src_main": "./src/index.ts",
     "matrix_src_browser": "./src/browser-index.ts",
     "matrix_lib_main": "./lib/index.js",
