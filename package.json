@@ -6,7 +6,7 @@
         "node": ">=16.0.0"
     },
     "scripts": {
-        "prepublishOnly": "yarn build",
+        "prepack": "yarn build",
         "start": "echo THIS IS FOR LEGACY PURPOSES ONLY. && babel src -w -s -d lib --verbose --extensions \".ts,.js\"",
         "dist": "echo 'This is for the release script so it can make assets (browser bundle).' && yarn build",
         "clean": "rimraf lib dist",
@@ -33,7 +33,8 @@
         "matrix-org"
     ],
     "main": "./src/index.ts",
-    "browser": "./src/browser-index.ts",
+    "browser": "./lib/browser-index.js",
+    "types": "./lib/browser-index.d.ts",
     "matrix_src_main": "./src/index.ts",
     "matrix_src_browser": "./src/browser-index.ts",
     "matrix_lib_main": "./lib/index.js",
