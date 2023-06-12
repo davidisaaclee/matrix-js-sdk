@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import { mocked } from "jest-mock";
+import fetchMock from "fetch-mock-jest";
 
 import { MatrixClient, PendingEventOrdering } from "../../../src/client";
 import { Room, RoomEvent } from "../../../src/models/room";
@@ -28,6 +29,9 @@ import { getMockClientWithEventEmitter, mockClientMethodsUser } from "../../test
 import { ReEmitter } from "../../../src/ReEmitter";
 import { Feature, ServerSupport } from "../../../src/feature";
 import { eventMapperFor } from "../../../src/event-mapper";
+import { logger } from "../../../src/logger";
+import * as utils from "../../../src/utils";
+import { ClientPrefix } from "../../../src";
 
 describe("Thread", () => {
     describe("constructor", () => {
@@ -75,6 +79,80 @@ describe("Thread", () => {
 
         await emitPromise(thread, ThreadEvent.Update);
         expect(thread.length).toBe(3);
+    });
+
+    it("avoids fetching thread root event when cached in store", async () => {
+        Thread.hasServerSideSupport = FeatureSupport.Stable;
+
+        fetchMock.mockReset();
+
+        const sender = "@bob:example.org";
+        const client = new MatrixClient({
+            baseUrl: "http://example.org",
+        });
+        const room = new Room("threadRoom", client, sender);
+        jest.spyOn(client.store, "getRoom").mockReturnValue(room);
+        const rootEvent = mkMessage({
+            user: sender,
+            event: true,
+        });
+
+        logger.debug(
+            "url",
+            client.http
+                .getUrl(
+                    utils.encodeUri("/rooms/$roomId/event/$eventId", {
+                        $roomId: room.roomId,
+                        $eventId: rootEvent.getId(),
+                    }),
+                    undefined,
+                    ClientPrefix.R0,
+                )
+                .toString(),
+        );
+        const thread = new Thread(rootEvent.getId()!, rootEvent, { room, client });
+
+        // sure, u may get it once...
+        fetchMock.getOnce(
+            client.http
+                .getUrl(
+                    utils.encodeUri("/rooms/$roomId/event/$eventId", {
+                        $roomId: room.roomId,
+                        $eventId: rootEvent.getId()!,
+                    }),
+                    undefined,
+                    ClientPrefix.R0,
+                )
+                .toString(),
+            () => {
+                logger.debug("here is your allotted get");
+                return rootEvent.getEffectiveEvent();
+            },
+        );
+
+        // ... but no more!!
+        const reply = mkMessage({
+            user: sender,
+            event: true,
+        });
+
+        thread.addEvent(reply, false);
+        fetchMock.getOnce(
+            client.http
+                .getUrl(
+                    utils.encodeUri("/rooms/$roomId/event/$eventId", {
+                        $roomId: room.roomId,
+                        $eventId: rootEvent.getId()!,
+                    }),
+                    undefined,
+                    ClientPrefix.R0,
+                )
+                .toString(),
+            () => {
+                throw new Error("should not have called this one");
+            },
+            { overwriteRoutes: true },
+        );
     });
 
     describe("hasUserReadEvent", () => {
