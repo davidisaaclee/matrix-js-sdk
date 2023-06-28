@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import log, { Logger } from "loglevel";
+import log, { Logger, LogLevelNames } from "loglevel";
 
 // This is to demonstrate, that you can use any namespace you want.
 // Namespaces allow you to turn on/off the logging for specific parts of the
@@ -24,6 +24,10 @@ import log, { Logger } from "loglevel";
 // See https://www.npmjs.com/package/debug to see how this could be implemented
 // Part of #332 is introducing a logging library in the first place.
 const DEFAULT_NAMESPACE = "matrix";
+
+const browserSupportedLogLevelNames: LogLevelNames[] = (["trace", "debug", "info", "debug", "error"] as const).filter(
+    (levelName) => levelName in console,
+);
 
 // because rageshakes in react-sdk hijack the console log, also at module load time,
 // initializing the logger here races with the initialization of rageshakes.
@@ -37,8 +41,7 @@ log.methodFactory = function (methodName, logLevel, loggerName) {
             args.unshift(this.prefix);
         }
         /* eslint-enable @typescript-eslint/no-invalid-this */
-        const supportedByConsole =
-            methodName === "error" || methodName === "warn" || methodName === "trace" || methodName === "info";
+        const supportedByConsole = browserSupportedLogLevelNames.includes(methodName);
         /* eslint-disable no-console */
         if (supportedByConsole) {
             return console[methodName](...args);
