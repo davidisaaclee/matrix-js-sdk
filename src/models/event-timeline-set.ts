@@ -25,18 +25,6 @@ import { RelationsContainer } from "./relations-container";
 import { MatrixClient } from "../client";
 import { Thread, ThreadFilterType } from "./thread";
 
-const DEBUG = true;
-
-/* istanbul ignore next */
-let debuglog: (...args: any[]) => void;
-if (DEBUG) {
-    // using bind means that we get to keep useful line numbers in the console
-    debuglog = logger.log.bind(logger);
-} else {
-    /* istanbul ignore next */
-    debuglog = function (): void {};
-}
-
 interface IOpts {
     // Set to true to enable improved timeline support.
     timelineSupport?: boolean;
@@ -504,7 +492,7 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
             lastEventWasNew = false;
 
             if (existingTimeline == timeline) {
-                debuglog("Event " + eventId + " already in timeline " + timeline);
+                logger.log("Event " + eventId + " already in timeline " + timeline);
                 continue;
             }
 
@@ -520,9 +508,11 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
                 // that would happen, so I'm going to ignore it for now.
                 //
                 if (existingTimeline == neighbour) {
-                    debuglog("Event " + eventId + " in neighbouring timeline - " + "switching to " + existingTimeline);
+                    logger.log(
+                        "Event " + eventId + " in neighbouring timeline - " + "switching to " + existingTimeline,
+                    );
                 } else {
-                    debuglog("Event " + eventId + " already in a different " + "timeline " + existingTimeline);
+                    logger.log("Event " + eventId + " already in a different " + "timeline " + existingTimeline);
                 }
                 timeline = existingTimeline;
                 continue;
@@ -639,7 +629,7 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
         const timeline = this._eventIdToTimeline.get(event.getId()!);
         if (timeline) {
             if (duplicateStrategy === DuplicateStrategy.Replace) {
-                debuglog("EventTimelineSet.addLiveEvent: replacing duplicate event " + event.getId());
+                logger.log("EventTimelineSet.addLiveEvent: replacing duplicate event " + event.getId());
                 const tlEvents = timeline.getEvents();
                 for (let j = 0; j < tlEvents.length; j++) {
                     if (tlEvents[j].getId() === event.getId()) {
@@ -655,7 +645,7 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
                     }
                 }
             } else {
-                debuglog("EventTimelineSet.addLiveEvent: ignoring duplicate event " + event.getId());
+                logger.log("EventTimelineSet.addLiveEvent: ignoring duplicate event " + event.getId());
             }
             return;
         }
