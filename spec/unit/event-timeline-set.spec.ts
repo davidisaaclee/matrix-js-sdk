@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import { mocked } from "jest-mock";
+
 import * as utils from "../test-utils/test-utils";
 import {
     DuplicateStrategy,
@@ -142,13 +144,6 @@ describe("EventTimelineSet", () => {
     });
 
     describe("addEventToTimeline", () => {
-        let thread: Thread;
-
-        beforeEach(() => {
-            (client.supportsThreads as jest.Mock).mockReturnValue(true);
-            thread = new Thread("!thread_id:server", messageEvent, { room, client });
-        });
-
         it("Adds event to timeline", () => {
             const liveTimeline = eventTimelineSet.getLiveTimeline();
             expect(liveTimeline.getEvents().length).toStrictEqual(0);
@@ -166,6 +161,42 @@ describe("EventTimelineSet", () => {
             expect(() => {
                 eventTimelineSet.addEventToTimeline(messageEvent, liveTimeline, true, false);
             }).not.toThrow();
+        });
+
+        it("should aggregate relations which belong to unknown timeline without adding them to any timeline", () => {
+            // If threads are disabled all events go into the main timeline
+            mocked(client.supportsThreads).mockReturnValue(true);
+            const reactionEvent = utils.mkReaction(messageEvent, client, client.getSafeUserId(), roomId);
+
+            const liveTimeline = eventTimelineSet.getLiveTimeline();
+            expect(liveTimeline.getEvents().length).toStrictEqual(0);
+            eventTimelineSet.addEventToTimeline(reactionEvent, liveTimeline, {
+                toStartOfTimeline: true,
+            });
+            expect(liveTimeline.getEvents().length).toStrictEqual(0);
+
+            eventTimelineSet.addEventToTimeline(messageEvent, liveTimeline, {
+                toStartOfTimeline: true,
+            });
+            expect(liveTimeline.getEvents()).toHaveLength(1);
+            const [event] = liveTimeline.getEvents();
+            const reactions = eventTimelineSet.relations!.getChildEventsForEvent(
+                event.getId()!,
+                "m.annotation",
+                "m.reaction",
+            )!;
+            const relations = reactions.getRelations();
+            expect(relations).toHaveLength(1);
+            expect(relations[0].getId()).toBe(reactionEvent.getId());
+        });
+    });
+
+    describe("addEventToTimeline (thread timeline)", () => {
+        let thread: Thread;
+
+        beforeEach(() => {
+            (client.supportsThreads as jest.Mock).mockReturnValue(true);
+            thread = new Thread("!thread_id:server", messageEvent, { room, client });
         });
 
         it("should not add an event to a timeline that does not belong to the timelineSet", () => {
@@ -197,7 +228,14 @@ describe("EventTimelineSet", () => {
             const liveTimeline = eventTimelineSetForThread.getLiveTimeline();
             expect(liveTimeline.getEvents().length).toStrictEqual(0);
 
-            eventTimelineSetForThread.addEventToTimeline(messageEvent, liveTimeline, {
+            const normalMessage = utils.mkMessage({
+                room: roomId,
+                user: userA,
+                msg: "Hello!",
+                event: true,
+            });
+
+            eventTimelineSetForThread.addEventToTimeline(normalMessage, liveTimeline, {
                 toStartOfTimeline: true,
             });
             expect(liveTimeline.getEvents().length).toStrictEqual(0);
@@ -336,7 +374,9 @@ describe("EventTimelineSet", () => {
         });
 
         it("should return true if the timeline set is not for a thread and the event is a thread root", () => {
+            const thread = new Thread(messageEvent.getId()!, messageEvent, { room, client });
             const eventTimelineSet = new EventTimelineSet(room, {}, client);
+            messageEvent.setThread(thread);
             expect(eventTimelineSet.canContain(messageEvent)).toBeTruthy();
         });
 

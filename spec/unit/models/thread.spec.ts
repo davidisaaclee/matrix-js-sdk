@@ -19,7 +19,7 @@ import fetchMock from "fetch-mock-jest";
 
 import { MatrixClient, PendingEventOrdering } from "../../../src/client";
 import { Room, RoomEvent } from "../../../src/models/room";
-import { Thread, THREAD_RELATION_TYPE, ThreadEvent, FeatureSupport } from "../../../src/models/thread";
+import { FeatureSupport, Thread, THREAD_RELATION_TYPE, ThreadEvent } from "../../../src/models/thread";
 import { makeThreadEvent, mkThread } from "../../test-utils/thread";
 import { TestClient } from "../../TestClient";
 import { emitPromise, mkEdit, mkMessage, mkReaction, mock } from "../../test-utils/test-utils";
@@ -47,6 +47,7 @@ describe("Thread", () => {
         const myUserId = "@bob:example.org";
         const testClient = new TestClient(myUserId, "DEVICE", "ACCESS_TOKEN", undefined, { timelineSupport: false });
         const client = testClient.client;
+        client.supportsThreads = jest.fn().mockReturnValue(true);
         const room = new Room("123", client, myUserId, {
             pendingEventOrdering: PendingEventOrdering.Detached,
         });
@@ -378,6 +379,7 @@ describe("Thread", () => {
                 timelineSupport: false,
             });
             const client = testClient.client;
+            client.supportsThreads = jest.fn().mockReturnValue(true);
             const room = new Room("123", client, myUserId, {
                 pendingEventOrdering: PendingEventOrdering.Detached,
             });
@@ -432,6 +434,7 @@ describe("Thread", () => {
                 timelineSupport: false,
             });
             const client = testClient.client;
+            client.supportsThreads = jest.fn().mockReturnValue(true);
             const room = new Room("123", client, myUserId, {
                 pendingEventOrdering: PendingEventOrdering.Detached,
             });
@@ -483,6 +486,7 @@ describe("Thread", () => {
                 timelineSupport: false,
             });
             const client = testClient.client;
+            client.supportsThreads = jest.fn().mockReturnValue(true);
             const room = new Room("123", client, myUserId, {
                 pendingEventOrdering: PendingEventOrdering.Detached,
             });
@@ -777,11 +781,7 @@ async function createThread(client: MatrixClient, user: string, roomId: string):
     root.setThreadId(root.getId());
     await room.addLiveEvents([root]);
 
-    // Create the thread and wait for it to be initialised
-    const thread = room.createThread(root.getId()!, root, [], false);
-    await new Promise<void>((res) => thread.once(RoomEvent.TimelineReset, () => res()));
-
-    return thread;
+    return room.createThread(root.getId()!, root, [], false);
 }
 
 /**

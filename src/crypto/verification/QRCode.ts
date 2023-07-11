@@ -18,6 +18,7 @@ limitations under the License.
  * QR code key verification.
  */
 
+import { crypto } from "../crypto";
 import { VerificationBase as Base } from "./Base";
 import { newKeyMismatchError, newUserCancelledError } from "./Error";
 import { decodeBase64, encodeUnpaddedBase64 } from "../olmlib";
@@ -36,6 +37,7 @@ export type QrCodeEvent = VerifierEvent;
 /** @deprecated use VerifierEvent */
 export const QrCodeEvent = VerifierEvent;
 
+/** @deprecated Avoid referencing this class directly; instead use {@link Crypto.Verifier}. */
 export class ReciprocateQRCode extends Base {
     public reciprocateQREvent?: ShowQrCodeCallbacks;
 
@@ -119,6 +121,10 @@ export class ReciprocateQRCode extends Base {
             }
         });
     };
+
+    public getReciprocateQrCodeCallbacks(): ShowQrCodeCallbacks | null {
+        return this.reciprocateQREvent ?? null;
+    }
 }
 
 const CODE_VERSION = 0x02; // the version of binary QR codes we support
@@ -195,7 +201,7 @@ export class QRCodeData {
 
     private static generateSharedSecret(): string {
         const secretBytes = new Uint8Array(11);
-        global.crypto.getRandomValues(secretBytes);
+        crypto.getRandomValues(secretBytes);
         return encodeUnpaddedBase64(secretBytes);
     }
 

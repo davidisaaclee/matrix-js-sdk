@@ -27,6 +27,7 @@ import {
     SyncApiOptions,
     defaultClientOpts,
     defaultSyncApiOpts,
+    SetPresence,
 } from "./sync";
 import { MatrixEvent } from "./models/event";
 import { Crypto } from "./crypto";
@@ -376,7 +377,7 @@ export class SlidingSyncSdk {
         });
     }
 
-    private onRoomData(roomId: string, roomData: MSC3575RoomData): void {
+    private async onRoomData(roomId: string, roomData: MSC3575RoomData): Promise<void> {
         let room = this.client.store.getRoom(roomId);
         if (!room) {
             if (!roomData.initial) {
@@ -385,7 +386,7 @@ export class SlidingSyncSdk {
             }
             room = _createAndReEmitRoom(this.client, roomId, this.opts);
         }
-        this.processRoomData(this.client, room, roomData);
+        await this.processRoomData(this.client, room!, roomData);
     }
 
     private onLifecycle(state: SlidingSyncState, resp: MSC3575SlidingSyncResponse | null, err?: Error): void {
@@ -461,6 +462,14 @@ export class SlidingSyncSdk {
      */
     public stopPeeking(): void {
         // TODO
+    }
+
+    /**
+     * Specify the set_presence value to be used for subsequent calls to the Sync API.
+     * @param presence - the presence to specify to set_presence of sync calls
+     */
+    public setPresence(presence?: SetPresence): void {
+        // TODO not possible in sliding sync yet
     }
 
     /**
