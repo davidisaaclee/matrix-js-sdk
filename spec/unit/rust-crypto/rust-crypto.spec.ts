@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-js";
-import { KeysQueryRequest, OlmMachine } from "@matrix-org/matrix-sdk-crypto-js";
+import * as RustSdkCryptoJs from "@matrix-org/matrix-sdk-crypto-wasm";
+import { KeysQueryRequest, OlmMachine } from "@matrix-org/matrix-sdk-crypto-wasm";
 import { Mocked } from "jest-mock";
 import fetchMock from "fetch-mock-jest";
 
@@ -23,6 +23,8 @@ import { RustCrypto } from "../../../src/rust-crypto/rust-crypto";
 import { initRustCrypto } from "../../../src/rust-crypto";
 import {
     CryptoEvent,
+    Device,
+    DeviceVerification,
     HttpApiEvent,
     HttpApiEventHandlerMap,
     IHttpOpts,
@@ -34,13 +36,17 @@ import {
 import { mkEvent } from "../../test-utils/test-utils";
 import { CryptoBackend } from "../../../src/common-crypto/CryptoBackend";
 import { IEventDecryptionResult } from "../../../src/@types/crypto";
-import { OutgoingRequest, OutgoingRequestProcessor } from "../../../src/rust-crypto/OutgoingRequestProcessor";
+import { OutgoingRequestProcessor } from "../../../src/rust-crypto/OutgoingRequestProcessor";
 import { ServerSideSecretStorage } from "../../../src/secret-storage";
 import { CryptoCallbacks, ImportRoomKeysOpts, VerificationRequest } from "../../../src/crypto-api";
 import * as testData from "../../test-utils/test-data";
 
 const TEST_USER = "@alice:example.com";
 const TEST_DEVICE_ID = "TEST_DEVICE";
+
+afterEach(() => {
+    fetchMock.reset();
+});
 
 describe("RustCrypto", () => {
     describe(".importRoomKeys and .exportRoomKeys", () => {
@@ -164,7 +170,7 @@ describe("RustCrypto", () => {
         });
     });
 
-    it("getCrossSigningKeyId", async () => {
+    it("getCrossSigningKeyId when there is no cross signing keys", async () => {
         const rustCrypto = await makeTestRustCrypto();
         await expect(rustCrypto.getCrossSigningKeyId()).resolves.toBe(null);
     });
@@ -347,6 +353,60 @@ describe("RustCrypto", () => {
         });
     });
 
+    describe("setDeviceVerified", () => {
+        let rustCrypto: RustCrypto;
+
+        async function getTestDevice(): Promise<Device> {
+            const devices = await rustCrypto.getUserDeviceInfo([testData.TEST_USER_ID]);
+            return devices.get(testData.TEST_USER_ID)!.get(testData.TEST_DEVICE_ID)!;
+        }
+
+        beforeEach(async () => {
+            rustCrypto = await makeTestRustCrypto(
+                new MatrixHttpApi(new TypedEventEmitter<HttpApiEvent, HttpApiEventHandlerMap>(), {
+                    baseUrl: "http://server/",
+                    prefix: "",
+                    onlyData: true,
+                }),
+                testData.TEST_USER_ID,
+            );
+
+            fetchMock.post("path:/_matrix/client/v3/keys/upload", { one_time_key_counts: {} });
+            fetchMock.post("path:/_matrix/client/v3/keys/query", {
+                device_keys: {
+                    [testData.TEST_USER_ID]: {
+                        [testData.TEST_DEVICE_ID]: testData.SIGNED_TEST_DEVICE_DATA,
+                    },
+                },
+            });
+            // call onSyncCompleted to kick off the outgoingRequestLoop and download the device list.
+            rustCrypto.onSyncCompleted({});
+
+            // before the call, the device should be unverified.
+            const device = await getTestDevice();
+            expect(device.verified).toEqual(DeviceVerification.Unverified);
+        });
+
+        it("should throw an error for an unknown device", async () => {
+            await expect(rustCrypto.setDeviceVerified(testData.TEST_USER_ID, "xxy")).rejects.toThrow("Unknown device");
+        });
+
+        it("should mark an unverified device as verified", async () => {
+            await rustCrypto.setDeviceVerified(testData.TEST_USER_ID, testData.TEST_DEVICE_ID);
+
+            // and confirm that the device is now verified
+            expect((await getTestDevice()).verified).toEqual(DeviceVerification.Verified);
+        });
+
+        it("should mark a verified device as unverified", async () => {
+            await rustCrypto.setDeviceVerified(testData.TEST_USER_ID, testData.TEST_DEVICE_ID);
+            expect((await getTestDevice()).verified).toEqual(DeviceVerification.Verified);
+
+            await rustCrypto.setDeviceVerified(testData.TEST_USER_ID, testData.TEST_DEVICE_ID, false);
+            expect((await getTestDevice()).verified).toEqual(DeviceVerification.Unverified);
+        });
+    });
+
     describe("getDeviceVerificationStatus", () => {
         let rustCrypto: RustCrypto;
         let olmMachine: Mocked<RustSdkCryptoJs.OlmMachine>;
@@ -390,60 +450,39 @@ describe("RustCrypto", () => {
         let rustCrypto: RustCrypto;
 
         beforeEach(async () => {
-            rustCrypto = await makeTestRustCrypto(undefined, testData.TEST_USER_ID);
-        });
-
-        afterEach(() => {
-            jest.useRealTimers();
-        });
-
-        it("returns false initially", async () => {
-            jest.useFakeTimers();
-            const prom = rustCrypto.userHasCrossSigningKeys();
-            // the getIdentity() request should wait for a /keys/query request to complete, but times out after 1500ms
-            await jest.advanceTimersByTimeAsync(2000);
-            await expect(prom).resolves.toBe(false);
-        });
-
-        it("returns false if there is no cross-signing identity", async () => {
-            // @ts-ignore private field
-            const olmMachine = rustCrypto.olmMachine;
-
-            const outgoingRequests: OutgoingRequest[] = await olmMachine.outgoingRequests();
-            // pick out the KeysQueryRequest, and respond to it with the device keys but *no* cross-signing keys.
-            const req = outgoingRequests.find((r) => r instanceof KeysQueryRequest)!;
-            await olmMachine.markRequestAsSent(
-                req.id!,
-                req.type,
-                JSON.stringify({
-                    device_keys: {
-                        [testData.TEST_USER_ID]: { [testData.TEST_DEVICE_ID]: testData.SIGNED_TEST_DEVICE_DATA },
-                    },
+            rustCrypto = await makeTestRustCrypto(
+                new MatrixHttpApi(new TypedEventEmitter<HttpApiEvent, HttpApiEventHandlerMap>(), {
+                    baseUrl: "http://server/",
+                    prefix: "",
+                    onlyData: true,
                 }),
+                testData.TEST_USER_ID,
             );
+        });
+
+        it("throws an error if the fetch fails", async () => {
+            fetchMock.post("path:/_matrix/client/v3/keys/query", 400);
+            await expect(rustCrypto.userHasCrossSigningKeys()).rejects.toThrow("400 error");
+        });
+
+        it("returns false if the user has no cross-signing keys", async () => {
+            fetchMock.post("path:/_matrix/client/v3/keys/query", {
+                device_keys: {
+                    [testData.TEST_USER_ID]: { [testData.TEST_DEVICE_ID]: testData.SIGNED_TEST_DEVICE_DATA },
+                },
+            });
 
             await expect(rustCrypto.userHasCrossSigningKeys()).resolves.toBe(false);
         });
 
-        it("returns true if OlmMachine has a cross-signing identity", async () => {
-            // @ts-ignore private field
-            const olmMachine = rustCrypto.olmMachine;
+        it("returns true if the user has cross-signing keys", async () => {
+            fetchMock.post("path:/_matrix/client/v3/keys/query", {
+                device_keys: {
+                    [testData.TEST_USER_ID]: { [testData.TEST_DEVICE_ID]: testData.SIGNED_TEST_DEVICE_DATA },
+                },
+                ...testData.SIGNED_CROSS_SIGNING_KEYS_DATA,
+            });
 
-            const outgoingRequests: OutgoingRequest[] = await olmMachine.outgoingRequests();
-            // pick out the KeysQueryRequest, and respond to it with the cross-signing keys
-            const req = outgoingRequests.find((r) => r instanceof KeysQueryRequest)!;
-            await olmMachine.markRequestAsSent(
-                req.id!,
-                req.type,
-                JSON.stringify({
-                    device_keys: {
-                        [testData.TEST_USER_ID]: { [testData.TEST_DEVICE_ID]: testData.SIGNED_TEST_DEVICE_DATA },
-                    },
-                    ...testData.SIGNED_CROSS_SIGNING_KEYS_DATA,
-                }),
-            );
-
-            // ... and we should now have cross-signing keys.
             await expect(rustCrypto.userHasCrossSigningKeys()).resolves.toBe(true);
         });
     });
@@ -517,6 +556,32 @@ describe("RustCrypto", () => {
             const rustCrypto = await makeTestRustCrypto();
             await expect(() => rustCrypto.requestDeviceVerification(TEST_USER, "unknown")).rejects.toThrow(
                 "Not a known device",
+            );
+        });
+    });
+
+    describe("get|storeSessionBackupPrivateKey", () => {
+        it("can save and restore a key", async () => {
+            const key = "testtesttesttesttesttesttesttest";
+            const rustCrypto = await makeTestRustCrypto();
+            await rustCrypto.storeSessionBackupPrivateKey(new TextEncoder().encode(key));
+            const fetched = await rustCrypto.getSessionBackupPrivateKey();
+            expect(new TextDecoder().decode(fetched!)).toEqual(key);
+        });
+    });
+
+    describe("getActiveSessionBackupVersion", () => {
+        it("returns null", async () => {
+            const rustCrypto = await makeTestRustCrypto();
+            expect(await rustCrypto.getActiveSessionBackupVersion()).toBeNull();
+        });
+    });
+
+    describe("findVerificationRequestDMInProgress", () => {
+        it("throws an error if the userId is not provided", async () => {
+            const rustCrypto = await makeTestRustCrypto();
+            expect(() => rustCrypto.findVerificationRequestDMInProgress(testData.TEST_ROOM_ID)).toThrow(
+                "missing userId",
             );
         });
     });

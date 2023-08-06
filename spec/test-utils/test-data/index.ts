@@ -5,11 +5,13 @@
 
 import { IDeviceKeys } from "../../../src/@types/crypto";
 import { IDownloadKeyResult } from "../../../src";
+import { KeyBackupInfo } from "../../../src/crypto-api";
 
 /* eslint-disable comma-dangle */
 
 export const TEST_USER_ID = "@alice:localhost";
 export const TEST_DEVICE_ID = "test_device";
+export const TEST_ROOM_ID = "!room:id";
 
 /** The base64-encoded public ed25519 key for this device */
 export const TEST_DEVICE_PUBLIC_ED25519_KEY_BASE64 = "YI/7vbGVLpGdYtuceQR8MSsKB/QjgfMXM1xqnn+0NWU";
@@ -35,6 +37,21 @@ export const SIGNED_TEST_DEVICE_DATA: IDeviceKeys = {
 
 /** base64-encoded public master cross-signing key */
 export const MASTER_CROSS_SIGNING_PUBLIC_KEY_BASE64 = "J+5An10v1vzZpAXTYFokD1/PEVccFnLC61EfRXit0UY";
+
+/** base64-encoded private master cross-signing key */
+export const MASTER_CROSS_SIGNING_PRIVATE_KEY_BASE64 = "ZG95b3VzcGVha3doYWFhYWFhYWFhYWFhYWFhYWFhbGU";
+
+/** base64-encoded public self cross-signing key */
+export const SELF_CROSS_SIGNING_PUBLIC_KEY_BASE64 = "aU2+2CyXQTCuDcmWW0EL2bhJ6PdjFW2LbAsbHqf02AY";
+
+/** base64-encoded private self signing cross-signing key */
+export const SELF_CROSS_SIGNING_PRIVATE_KEY_BASE64 = "c2VsZnNlbGZzZWxmc2VsZnNlbGZzZWxmc2VsZnNlbGY";
+
+/** base64-encoded public user cross-signing key */
+export const USER_CROSS_SIGNING_PUBLIC_KEY_BASE64 = "g5TC/zjQXyZYuDLZv7a41z5fFVrXpYPypG//AFQj8hY";
+
+/** base64-encoded private user signing cross-signing key */
+export const USER_CROSS_SIGNING_PRIVATE_KEY_BASE64 = "dXNlcnVzZXJ1c2VydXNlcnVzZXJ1c2VydXNlcnVzZXI";
 
 /** Signed cross-signing keys data, also suitable for returning from a `/keys/query` call */
 export const SIGNED_CROSS_SIGNING_KEYS_DATA: Partial<IDownloadKeyResult> = {
@@ -78,6 +95,23 @@ export const SIGNED_CROSS_SIGNING_KEYS_DATA: Partial<IDownloadKeyResult> = {
                 "@alice:localhost": {
                     "ed25519:J+5An10v1vzZpAXTYFokD1/PEVccFnLC61EfRXit0UY": "6AkD1XM2H0/ebgP9oBdMKNeft7uxsrb0XN1CsjjHgeZCvCTMmv3BHlLiT/Hzy4fe8H+S1tr484dcXN/PIdnfDA"
                 }
+            }
+        }
+    }
+};
+
+/** base64-encoded backup decryption (private) key */
+export const BACKUP_DECRYPTION_KEY_BASE64 = "dwdtCnMYpX08FsFyUbJmRd9ML4frwJkqsXf7pR25LCo=";
+
+/** Signed backup data, suitable for return from `GET /_matrix/client/v3/room_keys/keys/{roomId}/{sessionId}` */
+export const SIGNED_BACKUP_DATA: KeyBackupInfo = {
+    "algorithm": "m.megolm_backup.v1.curve25519-aes-sha2",
+    "version": "1",
+    "auth_data": {
+        "public_key": "hSDwCYkwp1R0i33ctD73Wg2/Og0mOBr066SpjqqbTmo",
+        "signatures": {
+            "@alice:localhost": {
+                "ed25519:test_device": "KDSNeumirTsd8piI0oVfv/wzg4J4HlEc7rs5XhODFcJ/YAcUdg65ajsZG+rLI0TQOSSGjorJqcrSiSB1HRSCAA"
             }
         }
     }

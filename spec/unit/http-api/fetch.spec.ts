@@ -277,11 +277,13 @@ describe("FetchHttpApi", () => {
         ];
         const runTests = (fetchBaseUrl: string) => {
             it.each<TestCase>(testCases)(
-                "creates url with params %s",
-                ({ path, queryParams, prefix, baseUrl }, result) => {
+                "creates url with params %s => %s",
+                ({ path, queryParams, prefix, baseUrl }, expected) => {
                     const api = makeApi(fetchBaseUrl);
 
-                    expect(api.getUrl(path, queryParams, prefix, baseUrl)).toEqual(new URL(result));
+                    const result = api.getUrl(path, queryParams, prefix, baseUrl);
+                    // we only check the stringified URL, to avoid having the test depend on the internals of URL.
+                    expect(result.toString()).toEqual(expected);
                 },
             );
         };
@@ -300,7 +302,7 @@ describe("FetchHttpApi", () => {
         const fetchFn = jest.fn().mockReturnValue(deferred.promise);
         jest.spyOn(logger, "debug").mockImplementation(() => {});
         const api = new FetchHttpApi(new TypedEventEmitter<any, any>(), { baseUrl, prefix, fetchFn });
-        const prom = api.requestOtherUrl(Method.Get, "https://server:8448/some/path#fragment?query=param");
+        const prom = api.requestOtherUrl(Method.Get, "https://server:8448/some/path?query=param#fragment");
         jest.advanceTimersByTime(1234);
         deferred.resolve({ ok: true, status: 200, text: () => Promise.resolve("RESPONSE") } as Response);
         await prom;
@@ -310,12 +312,12 @@ describe("FetchHttpApi", () => {
         expect(logger.debug).toHaveBeenCalledTimes(2);
         expect(mocked(logger.debug).mock.calls[0]).toMatchInlineSnapshot(`
             [
-              "FetchHttpApi: --> GET https://server:8448/some/path",
+              "FetchHttpApi: --> GET https://server:8448/some/path?query=xxx",
             ]
         `);
         expect(mocked(logger.debug).mock.calls[1]).toMatchInlineSnapshot(`
             [
-              "FetchHttpApi: <-- GET https://server:8448/some/path [1234ms 200]",
+              "FetchHttpApi: <-- GET https://server:8448/some/path?query=xxx [1234ms 200]",
             ]
         `);
     });

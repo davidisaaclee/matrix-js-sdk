@@ -22,12 +22,10 @@ import { checkObjectHasKeys, encodeParams } from "../utils";
 import { TypedEventEmitter } from "../models/typed-event-emitter";
 import { Method } from "./method";
 import { ConnectionError, MatrixError } from "./errors";
-import { HttpApiEvent, HttpApiEventHandlerMap, IHttpOpts, IRequestOpts } from "./interface";
+import { HttpApiEvent, HttpApiEventHandlerMap, IHttpOpts, IRequestOpts, Body } from "./interface";
 import { anySignal, parseErrorResponse, timeoutSignal } from "./utils";
 import { QueryDict } from "../utils";
 import { logger } from "../logger";
-
-type Body = Record<string, any> | BodyInit;
 
 interface TypedResponse<T> extends Response {
     json(): Promise<T>;
@@ -224,9 +222,9 @@ export class FetchHttpApi<O extends IHttpOpts> {
         method: Method,
         url: URL | string,
         body?: Body,
-        opts: Pick<IRequestOpts, "headers" | "json" | "localTimeoutMs" | "keepAlive" | "abortSignal"> = {},
+        opts: Pick<IRequestOpts, "headers" | "json" | "localTimeoutMs" | "keepAlive" | "abortSignal" | "priority"> = {},
     ): Promise<ResponseType<T, O>> {
-        const urlForLogs = this.clearUrlParamsForLogs(url);
+        const urlForLogs = this.sanitizeUrlForLogs(url);
         logger.debug(`FetchHttpApi: --> ${method} ${urlForLogs}`);
 
         const headers = Object.assign({}, opts.headers || {});
@@ -278,6 +276,7 @@ export class FetchHttpApi<O extends IHttpOpts> {
                 cache: "no-cache",
                 credentials: "omit", // we send credentials via headers
                 keepalive: keepAlive,
+                priority: opts.priority,
             });
 
             logger.debug(`FetchHttpApi: <-- ${method} ${urlForLogs} [${Date.now() - start}ms ${res.status}]`);
@@ -301,7 +300,7 @@ export class FetchHttpApi<O extends IHttpOpts> {
         return res as ResponseType<T, O>;
     }
 
-    private clearUrlParamsForLogs(url: URL | string): string {
+    private sanitizeUrlForLogs(url: URL | string): string {
         try {
             let asUrl: URL;
             if (typeof url === "string") {
@@ -309,9 +308,15 @@ export class FetchHttpApi<O extends IHttpOpts> {
             } else {
                 asUrl = url;
             }
-            // get just the path to remove any potential url param that could have
-            // some potential secrets
-            return asUrl.origin + asUrl.pathname;
+            // Remove the values of any URL params that could contain potential secrets
+            const sanitizedQs = new URLSearchParams();
+            for (const key of asUrl.searchParams.keys()) {
+                sanitizedQs.append(key, "xxx");
+            }
+            const sanitizedQsString = sanitizedQs.toString();
+            const sanitizedQsUrlPiece = sanitizedQsString ? `?${sanitizedQsString}` : "";
+
+            return asUrl.origin + asUrl.pathname + sanitizedQsUrlPiece;
         } catch (error) {
             // defensive coding for malformed url
             return "??";

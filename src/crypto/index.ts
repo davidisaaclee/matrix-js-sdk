@@ -48,9 +48,9 @@ import { InRoomChannel, InRoomRequests } from "./verification/request/InRoomChan
 import { Request, ToDeviceChannel, ToDeviceRequests } from "./verification/request/ToDeviceChannel";
 import { IllegalMethod } from "./verification/IllegalMethod";
 import { KeySignatureUploadError } from "../errors";
-import { calculateKeyCheck, decryptAES, encryptAES } from "./aes";
+import { calculateKeyCheck, decryptAES, encryptAES, IEncryptedPayload } from "./aes";
 import { DehydrationManager } from "./dehydration";
-import { BackupManager } from "./backup";
+import { BackupManager, backupTrustInfoFromLegacyTrustInfo } from "./backup";
 import { IStore } from "../store";
 import { Room, RoomEvent } from "../models/room";
 import { RoomMember, RoomMemberEvent } from "../models/room-member";
@@ -87,10 +87,12 @@ import {
 } from "../secret-storage";
 import { ISecretRequest } from "./SecretSharing";
 import {
+    BackupTrustInfo,
     BootstrapCrossSigningOpts,
     CrossSigningStatus,
     DeviceVerificationStatus,
     ImportRoomKeysOpts,
+    KeyBackupInfo,
     VerificationRequest as CryptoApiVerificationRequest,
 } from "../crypto-api";
 import { Device, DeviceMap } from "../models/device";
@@ -1242,21 +1244,22 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
      * @returns the key, if any, or null
      */
     public async getSessionBackupPrivateKey(): Promise<Uint8Array | null> {
-        let key = await new Promise<any>((resolve) => {
-            // TODO types
+        const encodedKey = await new Promise<Uint8Array | IEncryptedPayload | string | null>((resolve) => {
             this.cryptoStore.doTxn("readonly", [IndexedDBCryptoStore.STORE_ACCOUNT], (txn) => {
                 this.cryptoStore.getSecretStorePrivateKey(txn, resolve, "m.megolm_backup.v1");
             });
         });
 
+        let key: Uint8Array | null = null;
+
         // make sure we have a Uint8Array, rather than a string
-        if (key && typeof key === "string") {
-            key = new Uint8Array(olmlib.decodeBase64(fixBackupKey(key) || key));
+        if (typeof encodedKey === "string") {
+            key = new Uint8Array(olmlib.decodeBase64(fixBackupKey(encodedKey) || encodedKey));
             await this.storeSessionBackupPrivateKey(key);
         }
-        if (key && key.ciphertext) {
+        if (encodedKey && typeof encodedKey === "object" && "ciphertext" in encodedKey) {
             const pickleKey = Buffer.from(this.olmDevice.pickleKey);
-            const decrypted = await decryptAES(key, pickleKey, "m.megolm_backup.v1");
+            const decrypted = await decryptAES(encodedKey, pickleKey, "m.megolm_backup.v1");
             key = olmlib.decodeBase64(decrypted);
         }
         return key;
@@ -1277,6 +1280,28 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
         return this.cryptoStore.doTxn("readwrite", [IndexedDBCryptoStore.STORE_ACCOUNT], (txn) => {
             this.cryptoStore.storeSecretStorePrivateKey(txn, "m.megolm_backup.v1", encryptedKey);
         });
+    }
+
+    /**
+     * Get the current status of key backup.
+     *
+     * Implementation of {@link CryptoApi.getActiveSessionBackupVersion}.
+     */
+    public async getActiveSessionBackupVersion(): Promise<string | null> {
+        if (this.backupManager.getKeyBackupEnabled()) {
+            return this.backupManager.version ?? null;
+        }
+        return null;
+    }
+
+    /**
+     * Determine if a key backup can be trusted.
+     *
+     * Implementation of {@link Crypto.CryptoApi.isKeyBackupTrusted}.
+     */
+    public async isKeyBackupTrusted(info: KeyBackupInfo): Promise<BackupTrustInfo> {
+        const trustInfo = await this.backupManager.isKeyBackupTrusted(info);
+        return backupTrustInfoFromLegacyTrustInfo(trustInfo);
     }
 
     /**
@@ -2174,6 +2199,15 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
     }
 
     /**
+     * Mark the given device as locally verified.
+     *
+     * Implementation of {@link CryptoApi#setDeviceVerified}.
+     */
+    public async setDeviceVerified(userId: string, deviceId: string, verified = true): Promise<void> {
+        await this.setDeviceVerification(userId, deviceId, verified);
+    }
+
+    /**
      * Update the blocked/verified state of the given device
      *
      * @param userId - owner of the device
@@ -2202,12 +2236,12 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
         blocked: boolean | null = null,
         known: boolean | null = null,
         keys?: Record<string, string>,
-    ): Promise<DeviceInfo | CrossSigningInfo> {
+    ): Promise<DeviceInfo | CrossSigningInfo | ICrossSigningKey | undefined> {
         // Check if the 'device' is actually a cross signing key
         // The js-sdk's verification treats cross-signing keys as devices
         // and so uses this method to mark them verified.
         const xsk = this.deviceList.getStoredCrossSigningForUser(userId);
-        if (xsk && xsk.getId() === deviceId) {
+        if (xsk?.getId() === deviceId) {
             if (blocked !== null || known !== null) {
                 throw new Error("Cannot set blocked or known for a cross-signing key");
             }
@@ -2257,7 +2291,7 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
                     // This will emit events when it comes back down the sync
                     // (we could do local echo to speed things up)
                 }
-                return device as any; // TODO types
+                return device!;
             } else {
                 return xsk;
             }
@@ -2346,8 +2380,8 @@ export class Crypto extends TypedEventEmitter<CryptoEvent, CryptoEventHandlerMap
         return deviceObj;
     }
 
-    public findVerificationRequestDMInProgress(roomId: string): VerificationRequest | undefined {
-        return this.inRoomVerificationRequests.findRequestInProgress(roomId);
+    public findVerificationRequestDMInProgress(roomId: string, userId?: string): VerificationRequest | undefined {
+        return this.inRoomVerificationRequests.findRequestInProgress(roomId, userId);
     }
 
     public getVerificationRequestsToDeviceInProgress(userId: string): VerificationRequest[] {

@@ -207,7 +207,7 @@ function startClient(httpBackend: HttpBackend, client: MatrixClient) {
     httpBackend.when("POST", "/filter").respond(200, { filter_id: "fid" });
     httpBackend.when("GET", "/sync").respond(200, INITIAL_SYNC_DATA);
 
-    client.startClient();
+    client.startClient({ threadSupport: true });
 
     // set up a promise which will resolve once the client is initialised
     const prom = new Promise<void>((resolve) => {
@@ -248,7 +248,7 @@ describe("getEventTimeline support", function () {
         return startClient(httpBackend, client).then(function () {
             const room = client.getRoom(roomId)!;
             const timelineSet = room!.getTimelineSets()[0];
-            expect(client.getEventTimeline(timelineSet, "event")).rejects.toBeTruthy();
+            return expect(client.getEventTimeline(timelineSet, "event")).rejects.toBeTruthy();
         });
     });
 
@@ -260,7 +260,18 @@ describe("getEventTimeline support", function () {
         return startClient(httpBackend, client).then(() => {
             const room = client.getRoom(roomId)!;
             const timelineSet = room!.getTimelineSets()[0];
-            expect(client.getEventTimeline(timelineSet, "event")).rejects.toBeFalsy();
+            httpBackend.when("GET", `/rooms/${encodeURIComponent(roomId)}/context/event`).respond(200, () => ({
+                event: {
+                    event_id: "event",
+                },
+                events_after: [],
+                events_before: [],
+                state: [],
+            }));
+            return Promise.all([
+                expect(client.getEventTimeline(timelineSet, "event")).resolves.toBeTruthy(),
+                httpBackend.flushAllExpected(),
+            ]);
         });
     });
 
@@ -271,7 +282,7 @@ describe("getEventTimeline support", function () {
 
         return startClient(httpBackend, client).then(function () {
             const timelineSet = new EventTimelineSet(undefined);
-            expect(client.getEventTimeline(timelineSet, "event")).rejects.toBeTruthy();
+            return expect(client.getEventTimeline(timelineSet, "event")).rejects.toBeTruthy();
         });
     });
 
@@ -778,7 +789,18 @@ describe("MatrixClient event timelines", function () {
             return startClient(httpBackend, client).then(() => {
                 const room = client.getRoom(roomId)!;
                 const timelineSet = room.getTimelineSets()[0];
-                expect(client.getLatestTimeline(timelineSet)).rejects.toBeFalsy();
+                httpBackend.when("GET", `/rooms/${encodeURIComponent(roomId)}/context/event`).respond(200, () => ({
+                    event: {
+                        event_id: "event",
+                    },
+                    events_after: [],
+                    events_before: [],
+                    state: [],
+                }));
+                return Promise.all([
+                    expect(client.getEventTimeline(timelineSet, "event")).resolves.toBeTruthy(),
+                    httpBackend.flushAllExpected(),
+                ]);
             });
         });
 
@@ -1262,7 +1284,6 @@ describe("MatrixClient event timelines", function () {
             THREAD_ROOT.event_id,
             THREAD_REPLY.event_id,
             THREAD_REPLY2.getId(),
-            THREAD_ROOT_REACTION.getId(),
             THREAD_REPLY3.getId(),
         ]);
     });
@@ -2004,6 +2025,25 @@ describe("MatrixClient event timelines", function () {
                 .when("GET", "/rooms/!foo%3Abar/event/" + encodeURIComponent(THREAD_ROOT.event_id!))
                 .respond(200, function () {
                     return THREAD_ROOT;
+                });
+            httpBackend
+                .when("GET", "/rooms/!foo%3Abar/event/" + encodeURIComponent(THREAD_ROOT.event_id!))
+                .respond(200, function () {
+                    return THREAD_ROOT;
+                });
+            httpBackend
+                .when(
+                    "GET",
+                    "/_matrix/client/v1/rooms/!foo%3Abar/relations/" +
+                        encodeURIComponent(THREAD_ROOT.event_id!) +
+                        "/" +
+                        encodeURIComponent(THREAD_RELATION_TYPE.name) +
+                        buildRelationPaginationQuery({ dir: Direction.Backward, limit: 1 }),
+                )
+                .respond(200, function () {
+                    return {
+                        chunk: [THREAD_REPLY],
+                    };
                 });
             await Promise.all([httpBackend.flushAllExpected(), utils.syncPromise(client)]);
 
