@@ -110,6 +110,12 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
     public constructor(public readonly id: string, public rootEvent: MatrixEvent | undefined, opts: IThreadOpts) {
         super();
 
+        // Thread is set as re-emitter for every child event.
+        // Set max listeners high enough to not be a practical limit; not
+        // Infinity, since it'd be nice to at least warn on easily-catchable
+        // runaway memory leaks.
+        this.setMaxListeners(999999);
+
         if (!opts?.room) {
             // Logging/debugging for https://github.com/vector-im/element-web/issues/22141
             // Hope is that we end up with a more obvious stack trace.
