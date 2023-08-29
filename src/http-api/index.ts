@@ -49,15 +49,11 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
         return this.uploadContentInternal(null, file, opts);
     }
 
-    public uploadContentTo(
-        target: {
-            mediaId: string;
-            serverName: string;
-        },
-        file: FileType,
-        opts: UploadOpts = {},
-    ): Promise<UploadResponse> {
-        return this.uploadContentInternal(target, file, opts);
+    public uploadContentTo(mediaUri: string, file: FileType, opts: UploadOpts = {}): Promise<UploadResponse> {
+        const mediaId = mediaUri.split("/").pop()!;
+        const serverName = mediaUri.split("/").slice(-2)[0];
+
+        return this.uploadContentInternal({ mediaId, serverName }, file, opts);
     }
 
     private uploadContentInternal(

@@ -8532,15 +8532,8 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         return this.http.uploadContent(file, opts);
     }
 
-    public uploadContentTo(
-        target: {
-            mediaId: string;
-            serverName: string;
-        },
-        file: FileType,
-        opts?: UploadOpts,
-    ): Promise<UploadResponse> {
-        return this.http.uploadContentTo(target, file, opts);
+    public uploadContentTo(mediaUri: string, file: FileType, opts?: UploadOpts): Promise<UploadResponse> {
+        return this.http.uploadContentTo(mediaUri, file, opts);
     }
 
     /**
