@@ -46,6 +46,28 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
      *    opts.onlyContentUri.  Rejects with an error (usually a MatrixError).
      */
     public uploadContent(file: FileType, opts: UploadOpts = {}): Promise<UploadResponse> {
+        return this.uploadContentInternal(null, file, opts);
+    }
+
+    public uploadContentTo(
+        target: {
+            mediaId: string;
+            serverName: string;
+        },
+        file: FileType,
+        opts: UploadOpts = {},
+    ): Promise<UploadResponse> {
+        return this.uploadContentInternal(target, file, opts);
+    }
+
+    private uploadContentInternal(
+        target: {
+            mediaId: string;
+            serverName: string;
+        } | null,
+        file: FileType,
+        opts: UploadOpts = {},
+    ): Promise<UploadResponse> {
         const includeFilename = opts.includeFilename ?? true;
         const abortController = opts.abortController ?? new AbortController();
 
@@ -59,6 +81,9 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
             abortController,
         } as Upload;
         const deferred = defer<UploadResponse>();
+
+        const path = target == null ? "/upload" : `/upload/${target.serverName}/${target.mediaId}`;
+        const method = target == null ? Method.Post : Method.Put;
 
         if (global.XMLHttpRequest) {
             const xhr = new global.XMLHttpRequest();
@@ -110,7 +135,7 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
                 });
             };
 
-            const url = this.getUrl("/upload", undefined, MediaPrefix.R0);
+            const url = this.getUrl(path, undefined, MediaPrefix.R0);
 
             if (includeFilename && fileName) {
                 url.searchParams.set("filename", encodeURIComponent(fileName));
@@ -120,7 +145,7 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
                 url.searchParams.set("access_token", encodeURIComponent(this.opts.accessToken));
             }
 
-            xhr.open(Method.Post, url.href);
+            xhr.open(method, url.href);
             if (this.opts.useAuthorizationHeader && this.opts.accessToken) {
                 xhr.setRequestHeader("Authorization", "Bearer " + this.opts.accessToken);
             }
@@ -138,7 +163,7 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
 
             const headers: Record<string, string> = { "Content-Type": contentType };
 
-            this.authedRequest<UploadResponse>(Method.Post, "/upload", queryParams, file, {
+            this.authedRequest<UploadResponse>(method, path, queryParams, file, {
                 prefix: MediaPrefix.R0,
                 headers,
                 abortSignal: abortController.signal,
