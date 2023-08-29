@@ -8511,7 +8511,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
 
     public createMediaUri(): Promise<ICreateMediaUriResponse> {
         return this.http.authedRequest(Method.Post, "/create", undefined, undefined, {
-            prefix: MediaPrefix.R0,
+            prefix: MediaPrefix.V1,
         });
     }
 
