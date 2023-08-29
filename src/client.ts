@@ -869,6 +869,12 @@ interface IWhoamiResponse {
     device_id?: string;
     is_guest?: boolean;
 }
+
+interface ICreateMediaUriResponse {
+    content_uri: string;
+    unused_expires_at?: number;
+}
+
 /* eslint-enable camelcase */
 
 // We're using this constant for methods overloading and inspect whether a variable
@@ -8501,6 +8507,12 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         }
 
         return this.http.authedRequest(Method.Post, "/user_directory/search", undefined, body);
+    }
+
+    public createMediaUri(): Promise<ICreateMediaUriResponse> {
+        return this.http.authedRequest(Method.Post, "/create", undefined, undefined, {
+            prefix: MediaPrefix.R0,
+        });
     }
 
     /**
