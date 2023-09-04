@@ -5657,7 +5657,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
      * `null`.
      * @returns Rejects: with an error response.
      */
-    public scrollback(room: Room, limit = 30): Promise<Room> {
+    public async scrollback(room: Room, limit = 30): Promise<Room> {
         let timeToWaitMs = 0;
 
         let info = this.ongoingScrollbacks[room.roomId] || {};
@@ -5672,7 +5672,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             return Promise.resolve(room); // already at the start.
         }
         // attempt to grab more events from the store first
-        const numAdded = this.store.scrollback(room, limit).length;
+        const numAdded = (await this.store.scrollback(room, limit)).length;
         if (numAdded === limit) {
             // store contained everything we needed.
             return Promise.resolve(room);
@@ -5692,7 +5692,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                         Direction.Backward,
                     );
                 })
-                .then((res: IMessagesResponse) => {
+                .then(async (res: IMessagesResponse) => {
                     const matrixEvents = res.chunk.map(this.getEventMapper());
                     if (res.state) {
                         const stateEvents = res.state.map(this.getEventMapper());
@@ -5711,7 +5711,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                     if (res.chunk.length === 0) {
                         room.oldState.paginationToken = null;
                     }
-                    this.store.storeEvents(room, matrixEvents, res.end ?? null, true);
+                    await this.store.storeEvents(room, matrixEvents, res.end ?? null, true);
                     delete this.ongoingScrollbacks[room.roomId];
                     resolve(room);
                 })

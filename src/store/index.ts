@@ -112,7 +112,7 @@ export interface IStore {
      * @returns An array of objects which will be at most 'limit'
      * length and at least 0. The objects are the raw event JSON.
      */
-    scrollback(room: Room, limit: number): MatrixEvent[];
+    scrollback(room: Room, limit: number): Promise<MatrixEvent[]>;
 
     /**
      * Store events for a room.
@@ -121,7 +121,7 @@ export interface IStore {
      * @param token - The token associated with these events.
      * @param toStart - True if these are paginated results.
      */
-    storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): void;
+    storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): Promise<void>;
 
     /**
      * Store a filter.

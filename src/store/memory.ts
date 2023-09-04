@@ -201,8 +201,8 @@ export class MemoryStore implements IStore {
      * @returns An array of objects which will be at most 'limit'
      * length and at least 0. The objects are the raw event JSON.
      */
-    public scrollback(room: Room, limit: number): MatrixEvent[] {
-        return [];
+    public scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+        return Promise.resolve([]);
     }
 
     /**
@@ -212,8 +212,9 @@ export class MemoryStore implements IStore {
      * @param token - The token associated with these events.
      * @param toStart - True if these are paginated results.
      */
-    public storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): void {
+    public storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): Promise<void> {
         // no-op because they've already been added to the room instance.
+        return Promise.resolve();
     }
 
     /**

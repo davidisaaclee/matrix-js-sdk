@@ -113,8 +113,8 @@ export class StubStore implements IStore {
     /**
      * No-op.
      */
-    public scrollback(room: Room, limit: number): MatrixEvent[] {
-        return [];
+    public scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+        return Promise.resolve([]);
     }
 
     /**
@@ -124,7 +124,9 @@ export class StubStore implements IStore {
      * @param token - The token associated with these events.
      * @param toStart - True if these are paginated results.
      */
-    public storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): void {}
+    public storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): Promise<void> {
+        return Promise.resolve();
+    }
 
     /**
      * Store a filter.
