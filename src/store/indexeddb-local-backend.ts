@@ -18,10 +18,33 @@ import { IMinimalEvent, ISyncData, ISyncResponse, SyncAccumulator } from "../syn
 import { deepCopy, promiseTry } from "../utils";
 import { exists as idbExists } from "../indexeddb-helpers";
 import { logger } from "../logger";
-import { IStateEventWithRoomId, IStoredClientOpts } from "../matrix";
+import { EventTimeline, IStateEventWithRoomId, IStoredClientOpts, MatrixEvent, Room } from "../matrix";
 import { ISavedSync } from "./index";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
+
+// A document in the `messages_chunks` store
+interface MessagesChunksDocument {
+    roomId: string;
+
+    // keyed by start token
+    chunks: Record<
+        string,
+        {
+            events: IMinimalEvent[];
+            end: string | null;
+        }
+    >;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+namespace MessagesChunksDocument {
+    export function validate(x: unknown): MessagesChunksDocument {
+        // TODO: validate!
+        // @ts-ignore
+        return x;
+    }
+}
 
 type DbMigration = (db: IDBDatabase) => void;
 const DB_MIGRATIONS: DbMigration[] = [
@@ -47,6 +70,9 @@ const DB_MIGRATIONS: DbMigration[] = [
     },
     (db): void => {
         db.createObjectStore("to_device_queue", { autoIncrement: true });
+    },
+    (db): void => {
+        db.createObjectStore("messages_chunks", { keyPath: "roomId" });
     },
     // Expand as needed.
 ];
@@ -597,6 +623,77 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         const store = txn.objectStore("to_device_queue");
         store.delete(id);
         await txnAsPromise(txn);
+    }
+
+    public async storeEvents(
+        room: Room,
+        events: MatrixEvent[],
+        start: string,
+        end: string | null,
+        toStart: boolean,
+    ): Promise<void> {
+        if (!toStart) {
+            throw new Error("LocalIndexedDBStoreBackend.storeEvents: toStart must be true");
+        }
+
+        const tx = this.db!.transaction(["messages_chunks"], "readwrite");
+        const store = tx.objectStore("messages_chunks");
+        const roomEventsRequest = await reqAsPromise(store.get(room.roomId));
+        const doc: MessagesChunksDocument =
+            roomEventsRequest.result == null
+                ? { roomId: room.roomId, chunks: {} }
+                : MessagesChunksDocument.validate(roomEventsRequest.result);
+
+        doc.chunks[start] = doc.chunks[start] ?? { events: [], end: null };
+        doc.chunks[start].end = end;
+        doc.chunks[start].events.splice(0, 0, ...events.map((e) => e.getEffectiveEvent()));
+
+        store.put(doc);
+
+        await txnAsPromise(tx);
+
+        // TODO: do thread stuff?
+        await room.addLiveEvents(events);
+        room.getLiveTimeline().setPaginationToken(end, EventTimeline.BACKWARDS);
+    }
+
+    public async scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+        const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
+        if (from == null) {
+            // if `from` is null, we can't return a cached scrollback - for
+            // example, this could mean that we just started the client, and new
+            // messages have come in at the new end of timeline since we last
+            // called `storeEvents`
+            return [];
+        }
+
+        const tx = this.db!.transaction(["messages_chunks"], "readonly");
+        const store = tx.objectStore("messages_chunks");
+        const request = await reqAsPromise(store.get(room.roomId));
+        if (request.result == null) {
+            return [];
+        }
+
+        const doc = MessagesChunksDocument.validate(request.result);
+        const chunk = doc.chunks[from];
+        if (chunk == null) {
+            return [];
+        }
+
+        // Even though we may have enough cached events to satisfy this
+        // request, we return an empty array, as we can't assert the next
+        // pagination token accurately.
+        if (chunk.events.length !== limit) {
+            return [];
+        }
+
+        const completeEvents = chunk.events.map((e) => new MatrixEvent(e));
+
+        // TODO: do thread stuff?
+        await room.addLiveEvents(completeEvents);
+        room.getLiveTimeline().setPaginationToken(chunk.end, EventTimeline.BACKWARDS);
+
+        return completeEvents;
     }
 
     /*

@@ -20,6 +20,7 @@ import { MemoryStore, IOpts as IBaseOpts } from "./memory";
 import { LocalIndexedDBStoreBackend } from "./indexeddb-local-backend";
 import { RemoteIndexedDBStoreBackend } from "./indexeddb-remote-backend";
 import { User } from "../models/user";
+import { Room } from "../models/room";
 import { IEvent, MatrixEvent } from "../models/event";
 import { logger } from "../logger";
 import { ISavedSync } from "./index";
@@ -376,6 +377,20 @@ export class IndexedDBStore extends MemoryStore {
 
     public removeToDeviceBatch(id: number): Promise<void> {
         return this.backend.removeToDeviceBatch(id);
+    }
+
+    public scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+        return this.backend.scrollback(room, limit);
+    }
+
+    public storeEvents(
+        room: Room,
+        events: MatrixEvent[],
+        start: string,
+        end: string | null,
+        toStart: boolean,
+    ): Promise<void> {
+        return this.backend.storeEvents(room, events, start, end, toStart);
     }
 }
 

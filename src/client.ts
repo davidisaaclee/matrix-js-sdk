@@ -5711,7 +5711,14 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                     if (res.chunk.length === 0) {
                         room.oldState.paginationToken = null;
                     }
-                    await this.store.storeEvents(room, matrixEvents, res.end ?? null, true);
+                    await this.store.storeEvents(
+                        room,
+                        matrixEvents,
+                        // Spec says that `start` is required, so we can assume it's not null
+                        res.start!,
+                        res.end ?? null,
+                        true,
+                    );
                     delete this.ongoingScrollbacks[room.roomId];
                     resolve(room);
                 })

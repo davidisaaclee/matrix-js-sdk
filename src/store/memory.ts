@@ -212,7 +212,13 @@ export class MemoryStore implements IStore {
      * @param token - The token associated with these events.
      * @param toStart - True if these are paginated results.
      */
-    public storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): Promise<void> {
+    public storeEvents(
+        room: Room,
+        events: MatrixEvent[],
+        start: string,
+        end: string | null,
+        toStart: boolean,
+    ): Promise<void> {
         // no-op because they've already been added to the room instance.
         return Promise.resolve();
     }

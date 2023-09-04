@@ -16,11 +16,26 @@ limitations under the License.
 
 import "fake-indexeddb/auto";
 import "jest-localstorage-mock";
+import { expect } from "@jest/globals";
 
 import { IndexedDBStore, IStateEventWithRoomId, MemoryStore } from "../../../src";
 import { emitPromise } from "../../test-utils/test-utils";
 import { LocalIndexedDBStoreBackend } from "../../../src/store/indexeddb-local-backend";
 import { defer } from "../../../src/utils";
+import { EventTimeline, MatrixClient, MatrixEvent, Room } from "../../../src";
+
+function areMatrixEventsEquivalent(a: unknown, b: unknown): boolean {
+    if (a instanceof MatrixEvent && b instanceof MatrixEvent) {
+        return a.isEquivalentTo(b);
+    }
+    const isArrayOfMatrixEvents = (arr: unknown): arr is MatrixEvent[] =>
+        Array.isArray(arr) && arr.every((x) => x instanceof MatrixEvent);
+    if (isArrayOfMatrixEvents(a) && isArrayOfMatrixEvents(b)) {
+        return a.length === b.length && a.every((x, i) => x.isEquivalentTo(b[i]));
+    }
+    return false;
+}
+expect.addEqualityTesters([areMatrixEventsEquivalent]);
 
 describe("IndexedDBStore", () => {
     afterEach(() => {
@@ -280,5 +295,87 @@ describe("IndexedDBStore", () => {
         await store.startup();
         await store.destroy();
         expect(terminate).toHaveBeenCalled();
+    });
+
+    it("should store and retrieve event scrollback", async () => {
+        let nextTestEventIdCount = 0;
+        function makeTestEvent() {
+            return new MatrixEvent({
+                event_id: `event${nextTestEventIdCount++}`,
+                content: {},
+            });
+        }
+
+        function getPaginationToken(room: Room) {
+            return room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
+        }
+        function setPaginationToken(room: Room, token: string) {
+            room.getLiveTimeline().setPaginationToken(token, EventTimeline.BACKWARDS);
+        }
+
+        jest.spyOn(MemoryStore.prototype, "storeEvents");
+        jest.spyOn(MemoryStore.prototype, "scrollback");
+
+        const store = new IndexedDBStore({
+            indexedDB: indexedDB,
+            dbName: "database",
+            localStorage,
+        });
+        await store.startup();
+
+        const existingEvents = [makeTestEvent()];
+        const chunks = [
+            { start: "token0", end: "token1", events: [makeTestEvent(), makeTestEvent(), makeTestEvent()] },
+            { start: "token1", end: "token2", events: [makeTestEvent(), makeTestEvent(), makeTestEvent()] },
+        ];
+
+        function setup() {
+            const room = new Room(
+                roomId,
+                new MatrixClient({ baseUrl: "https://example.org", store }),
+                "@user:example.org",
+                { timelineSupport: true },
+            );
+            room.addEventsToTimeline(existingEvents, true, room.getLiveTimeline());
+            setPaginationToken(room, chunks[0].start);
+            return { room };
+        }
+
+        let { room } = setup();
+
+        await expect(store.scrollback(room, 10)).resolves.toStrictEqual([]);
+
+        for (const chunk of chunks) {
+            await store.storeEvents(room, chunk.events, chunk.start, chunk.end, true);
+            expect(getPaginationToken(room)).toBe(chunk.end);
+        }
+        expect(MemoryStore.prototype.storeEvents).not.toHaveBeenCalled();
+
+        // `storeEvents` should insert the events into the `Room`
+        expect(room.getLiveTimeline().getEvents()).toContainEqual(chunks[0].events[0]);
+
+        // Create new version of room (matching the state before the `storeEvents` calls)
+        // This simulates a fresh launch of the client
+        const freshSetup = setup();
+        // shadow `room` to ensure we don't accidentally use the old one
+        room = freshSetup.room;
+
+        // get the whole first chunk
+        await expect(store.scrollback(room, 3)).resolves.toEqual(chunks[0].events);
+        expect(getPaginationToken(room)).toBe(chunks[0].end);
+        for (const event of chunks[0].events) {
+            expect(room.getLiveTimeline().getEvents()).toContainEqual(event);
+        }
+
+        // Even though we have enough cached events to satisfy this request, we
+        // return an empty array, as we can't assert the next pagination token
+        // accurately.
+        await expect(store.scrollback(room, 2)).resolves.toEqual([]);
+        // Token does not get updated
+        expect(getPaginationToken(room)).toBe(chunks[0].end);
+
+        expect(MemoryStore.prototype.scrollback).not.toHaveBeenCalled();
+
+        await store.destroy();
     });
 });

@@ -118,10 +118,11 @@ export interface IStore {
      * Store events for a room.
      * @param room - The room to store events for.
      * @param events - The events to store.
-     * @param token - The token associated with these events.
+     * @param start - The token associated with these events.
+     * @param end - The token pointing to the next chunk of messages.
      * @param toStart - True if these are paginated results.
      */
-    storeEvents(room: Room, events: MatrixEvent[], token: string | null, toStart: boolean): Promise<void>;
+    storeEvents(room: Room, events: MatrixEvent[], start: string, end: string | null, toStart: boolean): Promise<void>;
 
     /**
      * Store a filter.
