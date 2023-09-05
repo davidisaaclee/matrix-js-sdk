@@ -644,9 +644,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
                 ? { roomId: room.roomId, chunks: {} }
                 : MessagesChunksDocument.validate(roomEventsRequest.result);
 
-        doc.chunks[start] = doc.chunks[start] ?? { events: [], end: null };
-        doc.chunks[start].end = end;
-        doc.chunks[start].events.splice(0, 0, ...events.map((e) => e.getEffectiveEvent()));
+        doc.chunks[start] = { events: events.map((e) => e.getEffectiveEvent()), end };
 
         store.put(doc);
 
