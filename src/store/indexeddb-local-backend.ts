@@ -678,13 +678,6 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
             return [];
         }
 
-        // Even though we may have enough cached events to satisfy this
-        // request, we return an empty array, as we can't assert the next
-        // pagination token accurately.
-        if (chunk.events.length !== limit) {
-            return [];
-        }
-
         const completeEvents = chunk.events.map((e) => new MatrixEvent(e));
 
         // TODO: do thread stuff?
