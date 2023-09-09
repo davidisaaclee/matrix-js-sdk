@@ -681,8 +681,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         const completeEvents = chunk.events.map((e) => new MatrixEvent(e));
 
         // TODO: do thread stuff?
-        await room.addLiveEvents(completeEvents);
-        room.getLiveTimeline().setPaginationToken(chunk.end, EventTimeline.BACKWARDS);
+        room.addEventsToTimeline(completeEvents, true, room.getLiveTimeline(), chunk.end ?? undefined);
 
         return completeEvents;
     }
