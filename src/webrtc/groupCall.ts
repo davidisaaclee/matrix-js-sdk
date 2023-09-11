@@ -237,6 +237,7 @@ export class GroupCall extends TypedEventEmitter<
     public readonly screenshareFeeds: CallFeed[] = [];
     public groupCallId: string;
     public readonly allowCallWithoutVideoAndAudio: boolean;
+    public preventOpeningAudioAndVideoStreams = false;
 
     private readonly calls = new Map<string, Map<string, MatrixCall>>(); // user_id -> device_id -> MatrixCall
     private callHandlers = new Map<string, Map<string, ICallHandlers>>(); // user_id -> device_id -> ICallHandlers
@@ -465,7 +466,9 @@ export class GroupCall extends TypedEventEmitter<
         let stream: MediaStream;
 
         try {
-            stream = await this.client.getMediaHandler().getUserMediaStream(true, this.type === GroupCallType.Video);
+            stream = this.preventOpeningAudioAndVideoStreams
+                ? new MediaStream()
+                : await this.client.getMediaHandler().getUserMediaStream(true, this.type === GroupCallType.Video);
         } catch (error) {
             // If is allowed to join a call without a media stream, then we
             // don't throw an error here. But we need an empty Local Feed to establish
@@ -729,7 +732,7 @@ export class GroupCall extends TypedEventEmitter<
     private async checkAudioPermissionIfNecessary(muted: boolean): Promise<boolean> {
         // We needed this here to avoid an error in case user join a call without a device.
         try {
-            if (!muted && this.localCallFeed && !this.localCallFeed.hasAudioTrack) {
+            if (!this.preventOpeningAudioAndVideoStreams && !muted && this.localCallFeed && !this.localCallFeed.hasAudioTrack) {
                 const stream = await this.client
                     .getMediaHandler()
                     .getUserMediaStream(true, !this.localCallFeed.isVideoMuted());
