@@ -49,8 +49,11 @@ interface IOpts extends IBaseOpts {
     dbName?: string;
     /** Optional factory to spin up a Worker to execute the IDB transactions within. */
     workerFactory?: () => Worker;
-    /** If true, may omit replaced state events when reading scrollback from store. Defaults to false.  */
-    omitReplacedState?: boolean;
+    /** If true, may omit replaced state events when reading scrollback from store.
+     * Provide an array of event types as an allowlist (e.g. `['m.call.member']`
+     * to only omit replaced `m.call.member` events; `[]` to disable omission).
+     * Defaults to false. */
+    omitReplacedState?: boolean | string[];
 }
 
 type EventHandlerMap = {

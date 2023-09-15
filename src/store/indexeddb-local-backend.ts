@@ -172,7 +172,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
     public constructor(
         private readonly indexedDB: IDBFactory,
         dbName = "default",
-        private omitReplacedState: boolean = false,
+        private omitReplacedState: boolean | string[] = false,
     ) {
         this.dbName = "matrix-js-sdk:" + dbName;
         this.syncAccumulator = new SyncAccumulator();
@@ -693,12 +693,22 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
         const timelineEvents = chunk.events.map(room.client.getEventMapper());
 
+        const shouldOmitEvent = (ev: MatrixEvent): boolean => {
+            if (!ev.isState()) {
+                return false;
+            }
+            if (Array.isArray(this.omitReplacedState) && !this.omitReplacedState.includes(ev.getType())) {
+                return false;
+            }
+            return ev.getUnsigned().isObsoleteState;
+        };
+
         const eventsToAdd = this.omitReplacedState
             ? // If enabled, filter out replaced state events to make this faster.
               // (e.g. rooms with many `m.call.member` events can be slow to
               // scrollback.) The replaced events are still included in the return
               // value of this list, just not inserted into the timeline.
-              timelineEvents.filter((ev) => !ev.getUnsigned().isObsoleteState)
+              timelineEvents.filter((ev) => !shouldOmitEvent(ev))
             : timelineEvents;
 
         // TODO: do thread stuff? see `MatrixClient#scrollback`
