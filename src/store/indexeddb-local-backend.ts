@@ -644,7 +644,8 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
                 ? { roomId: room.roomId, chunks: {} }
                 : MessagesChunksDocument.validate(roomEventsRequest.result);
 
-        doc.chunks[start] = { events: filterReplacedStateEvents(events, room).map((e) => e.getEffectiveEvent()), end };
+        markReplacedStateEvents(events, room);
+        doc.chunks[start] = { events: events.map((e) => e.getEffectiveEvent()), end };
 
         store.put(doc);
 
@@ -684,7 +685,11 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         // with many `m.call.member` events can be slow to scrollback.) The
         // replaced events are still included in the return value of this list,
         // just not inserted into the timeline.
-        const timelineEventsWithoutReplacedStateEvents = filterReplacedStateEvents(timelineEvents, room);
+        // const timelineEventsWithoutReplacedStateEvents = filterReplacedStateEvents(timelineEvents, room);
+        const timelineEventsWithoutReplacedStateEvents = timelineEvents.filter(
+            (ev) => !ev.getUnsigned().isObsoleteState,
+        );
+
         // TODO: do thread stuff? see `MatrixClient#scrollback`
         room.addEventsToTimeline(
             timelineEventsWithoutReplacedStateEvents,
@@ -704,11 +709,11 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
     }
 }
 
-function filterReplacedStateEvents(
+function markReplacedStateEvents(
     /** Must be in reverse-chronological order; must be being inserted at start of room timeline */
     events: MatrixEvent[],
     room: Room,
-): MatrixEvent[] {
+): void {
     // Since we're not inserting these events until after we're done
     // filtering, we need to both check the state of the room *and* the
     // events that we're planning to add as part of this batch - if
@@ -717,7 +722,7 @@ function filterReplacedStateEvents(
     const currentRoomStateEvents = room.getLiveTimeline().getState(Direction.Backward)?.events;
     const alreadyProcessedStateInThisBatch: { [eventType: string]: { [stateKey: string]: boolean } } = {};
 
-    return events.filter((event) => {
+    events.forEach((event) => {
         if (!event.isState()) {
             return true;
         }
@@ -727,12 +732,16 @@ function filterReplacedStateEvents(
 
         // Just add it if we can't read the state key
         if (stateKey == null) {
-            return true;
+            return;
         }
 
         if (alreadyProcessedStateInThisBatch[eventType]?.[stateKey]) {
             // We already encountered this type-key tuple in this batch; skip
-            return false;
+            event.setUnsigned({
+                ...event.getUnsigned(),
+                isObsoleteState: true,
+            });
+            return;
         }
 
         // Regardless of whether we'll count this event, make sure to
@@ -742,9 +751,20 @@ function filterReplacedStateEvents(
 
         if (currentRoomStateEvents?.get(eventType)?.get(stateKey) != null) {
             // We already have a state event under this key in the room, so don't add it again
-            return false;
+            event.setUnsigned({
+                ...event.getUnsigned(),
+                isObsoleteState: true,
+            });
+            return;
         }
-
-        return true;
     });
+}
+
+function filterReplacedStateEvents(
+    /** Must be in reverse-chronological order; must be being inserted at start of room timeline */
+    events: MatrixEvent[],
+    room: Room,
+): MatrixEvent[] {
+    markReplacedStateEvents(events, room);
+    return events.filter((event) => event.getUnsigned().isObsoleteState !== true);
 }
