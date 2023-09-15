@@ -49,6 +49,8 @@ interface IOpts extends IBaseOpts {
     dbName?: string;
     /** Optional factory to spin up a Worker to execute the IDB transactions within. */
     workerFactory?: () => Worker;
+    /** If true, may omit replaced state events when reading scrollback from store. Defaults to false.  */
+    omitReplacedState?: boolean;
 }
 
 type EventHandlerMap = {
@@ -116,7 +118,7 @@ export class IndexedDBStore extends MemoryStore {
         if (opts.workerFactory) {
             this.backend = new RemoteIndexedDBStoreBackend(opts.workerFactory, opts.dbName);
         } else {
-            this.backend = new LocalIndexedDBStoreBackend(opts.indexedDB, opts.dbName);
+            this.backend = new LocalIndexedDBStoreBackend(opts.indexedDB, opts.dbName, opts.omitReplacedState);
         }
     }
 

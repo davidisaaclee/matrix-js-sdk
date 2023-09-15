@@ -169,7 +169,11 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
      * @param dbName - Optional database name. The same name must be used
      * to open the same database.
      */
-    public constructor(private readonly indexedDB: IDBFactory, dbName = "default") {
+    public constructor(
+        private readonly indexedDB: IDBFactory,
+        dbName = "default",
+        private omitReplacedState: boolean = false,
+    ) {
         this.dbName = "matrix-js-sdk:" + dbName;
         this.syncAccumulator = new SyncAccumulator();
     }
@@ -689,22 +693,16 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
         const timelineEvents = chunk.events.map(room.client.getEventMapper());
 
-        // Filter out replaced state events to make this faster. (e.g. rooms
-        // with many `m.call.member` events can be slow to scrollback.) The
-        // replaced events are still included in the return value of this list,
-        // just not inserted into the timeline.
-        // const timelineEventsWithoutReplacedStateEvents = filterReplacedStateEvents(timelineEvents, room);
-        const timelineEventsWithoutReplacedStateEvents = timelineEvents.filter(
-            (ev) => !ev.getUnsigned().isObsoleteState,
-        );
+        const eventsToAdd = this.omitReplacedState
+            ? // If enabled, filter out replaced state events to make this faster.
+              // (e.g. rooms with many `m.call.member` events can be slow to
+              // scrollback.) The replaced events are still included in the return
+              // value of this list, just not inserted into the timeline.
+              timelineEvents.filter((ev) => !ev.getUnsigned().isObsoleteState)
+            : timelineEvents;
 
         // TODO: do thread stuff? see `MatrixClient#scrollback`
-        room.addEventsToTimeline(
-            timelineEventsWithoutReplacedStateEvents,
-            true,
-            room.getLiveTimeline(),
-            chunk.end ?? undefined,
-        );
+        room.addEventsToTimeline(eventsToAdd, true, room.getLiveTimeline(), chunk.end ?? undefined);
 
         return timelineEvents;
     }
@@ -717,6 +715,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
     }
 }
 
+/** Adds `isObsoleteState` field to unsigned data for replaced state events */
 function markReplacedStateEvents(
     /** Must be in reverse-chronological order; must be being inserted at start of room timeline */
     events: MatrixEvent[],
