@@ -18,7 +18,7 @@ import { IMinimalEvent, ISyncData, ISyncResponse, SyncAccumulator } from "../syn
 import { deepCopy, promiseTry } from "../utils";
 import { exists as idbExists } from "../indexeddb-helpers";
 import { logger } from "../logger";
-import { EventTimeline, IStateEventWithRoomId, IStoredClientOpts, MatrixEvent, Room } from "../matrix";
+import { Direction, EventTimeline, IStateEventWithRoomId, IStoredClientOpts, MatrixEvent, Room } from "../matrix";
 import { ISavedSync } from "./index";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
@@ -685,7 +685,14 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         // replaced events are still included in the return value of this list,
         // just not inserted into the timeline.
         const timelineEventsWithoutReplacedStateEvents = ((): typeof timelineEvents => {
-            const skipStateEvent: { [eventType: string]: { [stateKey: string]: boolean } } = {};
+            // Since we're not inserting these events until after we're done
+            // filtering, we need to both check the state of the room *and* the
+            // events that we're planning to add as part of this batch - if
+            // we're adding redundant state relative to either of these, we
+            // should skip the event.
+            const currentRoomStateEvents = room.getLiveTimeline().getState(Direction.Backward)?.events;
+            const alreadyProcessedStateInThisBatch: { [eventType: string]: { [stateKey: string]: boolean } } = {};
+
             return timelineEvents.filter((event) => {
                 if (!event.isState()) {
                     return true;
@@ -693,18 +700,27 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
                 const eventType = event.getType();
                 const stateKey = event.getStateKey();
+
+                // Just add it if we can't read the state key
                 if (stateKey == null) {
                     return true;
                 }
-                if (skipStateEvent[eventType]?.[stateKey]) {
+
+                if (alreadyProcessedStateInThisBatch[eventType]?.[stateKey]) {
+                    // We already encountered this type-key tuple in this batch; skip
                     return false;
                 }
 
-                // Skip the next state event of this type-state_key tuple
-                skipStateEvent[eventType] = skipStateEvent[eventType] ?? {};
-                skipStateEvent[eventType][stateKey] = true;
+                // Regardless of whether we'll count this event, make sure to
+                // skip the next state event of this type-state_key tuple
+                alreadyProcessedStateInThisBatch[eventType] = alreadyProcessedStateInThisBatch[eventType] ?? {};
+                alreadyProcessedStateInThisBatch[eventType][stateKey] = true;
 
-                // ... but keep this one
+                if (currentRoomStateEvents?.get(eventType)?.get(stateKey) != null) {
+                    // We already have a state event under this key in the room, so don't add it again
+                    return false;
+                }
+
                 return true;
             });
         })();
