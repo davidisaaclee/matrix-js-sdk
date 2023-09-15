@@ -24,7 +24,7 @@ import { User } from "../models/user";
 import { IEvent, MatrixEvent } from "../models/event";
 import { RoomState, RoomStateEvent } from "../models/room-state";
 import { RoomMember } from "../models/room-member";
-import { Filter } from "../filter";
+import { Filter, IRoomEventFilter } from "../filter";
 import { ISavedSync, IStore } from "./index";
 import { RoomSummary } from "../models/room-summary";
 import { ISyncResponse } from "../sync-accumulator";
@@ -201,7 +201,7 @@ export class MemoryStore implements IStore {
      * @returns An array of objects which will be at most 'limit'
      * length and at least 0. The objects are the raw event JSON.
      */
-    public scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+    public scrollback(_room: Room, _limit: number, _filter?: IRoomEventFilter): Promise<MatrixEvent[]> {
         return Promise.resolve([]);
     }
 

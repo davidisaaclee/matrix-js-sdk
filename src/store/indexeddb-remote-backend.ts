@@ -18,7 +18,7 @@ import { logger } from "../logger";
 import { defer, IDeferred } from "../utils";
 import { ISavedSync } from "./index";
 import { IStoredClientOpts } from "../client";
-import { IStateEventWithRoomId, ISyncResponse, MatrixEvent, Room } from "../matrix";
+import { IRoomEventFilter, IStateEventWithRoomId, ISyncResponse, MatrixEvent, Room } from "../matrix";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
 
@@ -212,7 +212,7 @@ export class RemoteIndexedDBStoreBackend implements IIndexedDBBackend {
         return Promise.resolve();
     }
 
-    public scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+    public scrollback(_room: Room, _limit: number, _filter: IRoomEventFilter): Promise<MatrixEvent[]> {
         // Not implemented
         return Promise.resolve([]);
     }

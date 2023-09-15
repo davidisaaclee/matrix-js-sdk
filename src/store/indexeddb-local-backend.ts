@@ -18,10 +18,19 @@ import { IMinimalEvent, ISyncData, ISyncResponse, SyncAccumulator } from "../syn
 import { deepCopy, promiseTry } from "../utils";
 import { exists as idbExists } from "../indexeddb-helpers";
 import { logger } from "../logger";
-import { Direction, EventTimeline, IStateEventWithRoomId, IStoredClientOpts, MatrixEvent, Room } from "../matrix";
+import {
+    Direction,
+    EventTimeline,
+    IRoomEventFilter,
+    IStateEventWithRoomId,
+    IStoredClientOpts,
+    MatrixEvent,
+    Room,
+} from "../matrix";
 import { ISavedSync } from "./index";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
+import { FilterComponent } from "../filter-component";
 
 // A document in the `messages_chunks` store
 interface MessagesChunksDocument {
@@ -668,7 +677,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         room.getLiveTimeline().setPaginationToken(end, EventTimeline.BACKWARDS);
     }
 
-    public async scrollback(room: Room, _limit: number): Promise<MatrixEvent[]> {
+    public async scrollback(room: Room, _limit: number, filter: IRoomEventFilter): Promise<MatrixEvent[]> {
         const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
         if (from == null) {
             // if `from` is null, we can't return a cached scrollback - for
@@ -691,7 +700,8 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
             return [];
         }
 
-        const timelineEvents = chunk.events.map(room.client.getEventMapper());
+        const filterObj = new FilterComponent(filter);
+        const timelineEvents = filterObj.filter(chunk.events.map(room.client.getEventMapper()));
 
         const shouldOmitEvent = (ev: MatrixEvent): boolean => {
             if (!ev.isState()) {

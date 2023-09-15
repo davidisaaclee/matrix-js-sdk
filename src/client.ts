@@ -5652,12 +5652,13 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
      * @param room - The room to get older messages in.
      * @param limit - Optional. The maximum number of previous events to
      * pull in. Default: 30.
+     * @param filter - Optional. A filter to set on the `/messages` request.
      * @returns Promise which resolves: Room. If you are at the beginning
      * of the timeline, `Room.oldState.paginationToken` will be
      * `null`.
      * @returns Rejects: with an error response.
      */
-    public async scrollback(room: Room, limit = 30): Promise<Room> {
+    public async scrollback(room: Room, limit = 30, filter?: IRoomEventFilter): Promise<Room> {
         let timeToWaitMs = 0;
 
         let info = this.ongoingScrollbacks[room.roomId] || {};
@@ -5672,7 +5673,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             return Promise.resolve(room); // already at the start.
         }
         // attempt to grab more events from the store first
-        const numAdded = (await this.store.scrollback(room, limit)).length;
+        const numAdded = (await this.store.scrollback(room, limit, filter)).length;
         if (numAdded === limit) {
             // store contained everything we needed.
             return Promise.resolve(room);
@@ -5681,6 +5682,15 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         limit = limit - numAdded;
 
         const promise = new Promise<Room>((resolve, reject) => {
+            // Although /messages takes just a single filter, we need to make a
+            // filter set for `createMessagesRequest`.
+            // See `Filter#getRoomTimelineFilterComponent()`.
+            const filterObj =
+                filter == null
+                    ? undefined
+                    : Filter.fromJson(undefined, "", {
+                          room: { timeline: filter },
+                      });
             // wait for a time before doing this request
             // (which may be 0 in order not to special case the code paths)
             sleep(timeToWaitMs)
@@ -5690,6 +5700,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                         room.oldState.paginationToken,
                         limit,
                         Direction.Backward,
+                        filterObj,
                     );
                 })
                 .then(async (res: IMessagesResponse) => {

@@ -18,7 +18,7 @@ import { EventType } from "../@types/event";
 import { Room } from "../models/room";
 import { User } from "../models/user";
 import { IEvent, MatrixEvent } from "../models/event";
-import { Filter } from "../filter";
+import { Filter, IRoomEventFilter } from "../filter";
 import { RoomSummary } from "../models/room-summary";
 import { IMinimalEvent, IRooms, ISyncResponse } from "../sync-accumulator";
 import { IStartClientOpts } from "../client";
@@ -109,10 +109,11 @@ export interface IStore {
      * Retrieve scrollback for this room.
      * @param room - The matrix room
      * @param limit - The max number of old events to retrieve.
+     * @param filter - A filter to apply to the results.
      * @returns An array of objects which will be at most 'limit'
      * length and at least 0. The objects are the raw event JSON.
      */
-    scrollback(room: Room, limit: number): Promise<MatrixEvent[]>;
+    scrollback(room: Room, limit: number, filter?: IRoomEventFilter): Promise<MatrixEvent[]>;
 
     /**
      * Store events for a room.
