@@ -189,6 +189,12 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
         logger.log(`LocalIndexedDBStoreBackend.connect: connecting...`);
         const req = this.indexedDB.open(this.dbName, VERSION);
+
+        // TODO: This is running parallel to this method's returned promise.
+        // This means that `connect()` can resolve while the DB is still being
+        // upgraded - leading to trying to access object stores that don't
+        // exist (and potentially ending up with no way to fix if the DB is
+        // marked as upgraded).
         req.onupgradeneeded = (ev): void => {
             const db = req.result;
             const oldVersion = ev.oldVersion;
@@ -644,6 +650,8 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
                 ? { roomId: room.roomId, chunks: {} }
                 : MessagesChunksDocument.validate(roomEventsRequest.result);
 
+        // TODO: would be a nice lil test to check what happens when the same
+        // chunk is `storeEvents`'d multiple times
         markReplacedStateEvents(events, room);
         doc.chunks[start] = { events: events.map((e) => e.getEffectiveEvent()), end };
 
@@ -758,13 +766,4 @@ function markReplacedStateEvents(
             return;
         }
     });
-}
-
-function filterReplacedStateEvents(
-    /** Must be in reverse-chronological order; must be being inserted at start of room timeline */
-    events: MatrixEvent[],
-    room: Room,
-): MatrixEvent[] {
-    markReplacedStateEvents(events, room);
-    return events.filter((event) => event.getUnsigned().isObsoleteState !== true);
 }
