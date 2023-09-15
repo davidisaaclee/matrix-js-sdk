@@ -655,7 +655,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         room.getLiveTimeline().setPaginationToken(end, EventTimeline.BACKWARDS);
     }
 
-    public async scrollback(room: Room, limit: number): Promise<MatrixEvent[]> {
+    public async scrollback(room: Room, _limit: number): Promise<MatrixEvent[]> {
         const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
         if (from == null) {
             // if `from` is null, we can't return a cached scrollback - for
@@ -678,12 +678,45 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
             return [];
         }
 
-        const completeEvents = chunk.events.map((e) => new MatrixEvent(e));
+        const timelineEvents = chunk.events.map(room.client.getEventMapper());
 
-        // TODO: do thread stuff?
-        room.addEventsToTimeline(completeEvents, true, room.getLiveTimeline(), chunk.end ?? undefined);
+        // Filter out replaced state events to make this faster. (e.g. rooms
+        // with many `m.call.member` events can be slow to scrollback.) The
+        // replaced events are still included in the return value of this list,
+        // just not inserted into the timeline.
+        const timelineEventsWithoutReplacedStateEvents = ((): typeof timelineEvents => {
+            const skipStateEvent: { [eventType: string]: { [stateKey: string]: boolean } } = {};
+            return timelineEvents.filter((event) => {
+                if (!event.isState()) {
+                    return true;
+                }
 
-        return completeEvents;
+                const eventType = event.getType();
+                const stateKey = event.getStateKey();
+                if (stateKey == null) {
+                    return true;
+                }
+                if (skipStateEvent[eventType]?.[stateKey]) {
+                    return false;
+                }
+
+                // Skip the next state event of this type-state_key tuple
+                skipStateEvent[eventType] = skipStateEvent[eventType] ?? {};
+                skipStateEvent[eventType][stateKey] = true;
+
+                // ... but keep this one
+                return true;
+            });
+        })();
+        // TODO: do thread stuff? see `MatrixClient#scrollback`
+        room.addEventsToTimeline(
+            timelineEventsWithoutReplacedStateEvents,
+            true,
+            room.getLiveTimeline(),
+            chunk.end ?? undefined,
+        );
+
+        return timelineEvents;
     }
 
     /*
