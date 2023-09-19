@@ -666,7 +666,26 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         // TODO: would be a nice lil test to check what happens when the same
         // chunk is `storeEvents`'d multiple times
         markReplacedStateEvents(events, room);
-        doc.chunks[start] = { events: events.map((e) => e.getEffectiveEvent()), end };
+        const nextStoredEventsChunk = ((): IMinimalEvent[] => {
+            const out = [...(doc.chunks[start]?.events ?? []), ...events.map((e) => e.getEffectiveEvent())];
+
+            // chunk is sorted with most recent event first (i.e. least origin_server_ts)
+            out.sort((a: any, b: any) => a.origin_server_ts - b.origin_server_ts);
+
+            // Remove duplicates
+            for (let i = 0; i < out.length; i++) {
+                if (out[i] == null) {
+                    break;
+                }
+                // @ts-ignore
+                while (out[i].event_id === out[i + 1]?.event_id) {
+                    out.splice(i + 1, 1);
+                }
+            }
+
+            return out;
+        })();
+        doc.chunks[start] = { events: nextStoredEventsChunk, end };
 
         store.put(doc);
 
