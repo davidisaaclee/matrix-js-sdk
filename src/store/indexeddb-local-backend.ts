@@ -673,8 +673,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         await txnAsPromise(tx);
 
         // TODO: do thread stuff?
-        await room.addLiveEvents(events);
-        room.getLiveTimeline().setPaginationToken(end, EventTimeline.BACKWARDS);
+        room.addEventsToTimeline(events, true, room.getLiveTimeline(), end ?? undefined);
     }
 
     public async scrollback(room: Room, _limit: number, filter: IRoomEventFilter): Promise<MatrixEvent[]> {
