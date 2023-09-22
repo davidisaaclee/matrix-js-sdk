@@ -740,6 +740,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
             : timelineEvents;
 
         // TODO: do thread stuff? see `MatrixClient#scrollback`
+        // TODO: if `chunk.end === undefined`, this will not set the pagination token
         room.addEventsToTimeline(eventsToAdd, true, room.getLiveTimeline(), chunk.end ?? undefined);
 
         if (limit != null && timelineEvents.length > limit) {
