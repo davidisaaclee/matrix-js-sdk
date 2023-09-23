@@ -40,6 +40,7 @@ import {
     IInviteState,
     IJoinedRoom,
     ILeftRoom,
+    IKnockedRoom,
     IMinimalEvent,
     IRoomEvent,
     IStateEvent,
@@ -649,18 +650,11 @@ export class SyncApi {
             this.opts.lazyLoadMembers = false;
         }
         if (this.opts.lazyLoadMembers) {
-            debuglog("Checking server lazy load support...");
-            const supported = await this.client.doesServerSupportLazyLoading();
-            if (supported) {
-                debuglog("Enabling lazy load on sync filter...");
-                if (!this.opts.filter) {
-                    this.opts.filter = this.buildDefaultFilter();
-                }
-                this.opts.filter.setLazyLoadMembers(true);
-            } else {
-                debuglog("LL: lazy loading requested but not supported " + "by server, so disabling");
-                this.opts.lazyLoadMembers = false;
+            debuglog("Enabling lazy load on sync filter...");
+            if (!this.opts.filter) {
+                this.opts.filter = this.buildDefaultFilter();
             }
+            this.opts.filter.setLazyLoadMembers(true);
         }
         // need to vape the store when enabling LL and wasn't enabled before
         debuglog("Checking whether lazy loading has changed in store...");
@@ -1247,6 +1241,7 @@ export class SyncApi {
         let inviteRooms: WrappedRoom<IInvitedRoom>[] = [];
         let joinRooms: WrappedRoom<IJoinedRoom>[] = [];
         let leaveRooms: WrappedRoom<ILeftRoom>[] = [];
+        let knockRooms: WrappedRoom<IKnockedRoom>[] = [];
 
         if (data.rooms) {
             if (data.rooms.invite) {
@@ -1257,6 +1252,9 @@ export class SyncApi {
             }
             if (data.rooms.leave) {
                 leaveRooms = this.mapSyncResponseToRoomArray(data.rooms.leave);
+            }
+            if (data.rooms.knock) {
+                knockRooms = this.mapSyncResponseToRoomArray(data.rooms.knock);
             }
         }
 
@@ -1518,6 +1516,26 @@ export class SyncApi {
             });
         });
 
+        // Handle knocks
+        await promiseMapSeries(knockRooms, async (knockObj) => {
+            const room = knockObj.room;
+            const stateEvents = this.mapSyncEventsFormat(knockObj.knock_state, room);
+
+            await this.injectRoomEvents(room, stateEvents);
+
+            if (knockObj.isBrandNewRoom) {
+                room.recalculate();
+                client.store.storeRoom(room);
+                client.emit(ClientEvent.Room, room);
+            } else {
+                // Update room state for knock->leave->knock cycles
+                room.recalculate();
+            }
+            stateEvents.forEach(function (e) {
+                client.emit(ClientEvent.Event, e);
+            });
+        });
+
         // update the notification timeline, if appropriate.
         // we only do this for live events, as otherwise we can't order them sanely
         // in the timeline relative to ones paginated in by /notifications.
@@ -1586,6 +1604,17 @@ export class SyncApi {
      * @param connDidFail - True if a connectivity failure has been detected. Optional.
      */
     private pokeKeepAlive(connDidFail = false): void {
+        if (!this.running) {
+            // we are in a keepAlive, retrying to connect, but the syncronization
+            // was stopped, so we are stopping the retry.
+            clearTimeout(this.keepAliveTimer);
+            if (this.connectionReturnedDefer) {
+                this.connectionReturnedDefer.reject("SyncApi.stop() was called");
+                this.connectionReturnedDefer = undefined;
+            }
+            return;
+        }
+
         const success = (): void => {
             clearTimeout(this.keepAliveTimer);
             if (this.connectionReturnedDefer) {
@@ -1636,7 +1665,7 @@ export class SyncApi {
             );
     }
 
-    private mapSyncResponseToRoomArray<T extends ILeftRoom | IJoinedRoom | IInvitedRoom>(
+    private mapSyncResponseToRoomArray<T extends ILeftRoom | IJoinedRoom | IInvitedRoom | IKnockedRoom>(
         obj: Record<string, T>,
     ): Array<WrappedRoom<T>> {
         // Maps { roomid: {stuff}, roomid: {stuff} }

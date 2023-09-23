@@ -80,7 +80,7 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
 
         const path = target == null ? "/upload" : `/upload/${target.serverName}/${target.mediaId}`;
         const method = target == null ? Method.Post : Method.Put;
-        const versionPrefix = target == null ? MediaPrefix.R0 : MediaPrefix.V3;
+        const versionPrefix = MediaPrefix.V3;
 
         if (global.XMLHttpRequest) {
             const xhr = new global.XMLHttpRequest();
@@ -204,7 +204,7 @@ export class MatrixHttpApi<O extends IHttpOpts> extends FetchHttpApi<O> {
     public getContentUri(): IContentUri {
         return {
             base: this.opts.baseUrl,
-            path: MediaPrefix.R0 + "/upload",
+            path: MediaPrefix.V3 + "/upload",
             params: {
                 access_token: this.opts.accessToken!,
             },
