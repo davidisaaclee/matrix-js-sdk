@@ -3725,7 +3725,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         targetSessionId?: string,
         opts?: IKeyBackupRestoreOpts,
     ): Promise<IKeyBackupRestoreResult> {
-        if (!this.crypto) {
+        if (!this.cryptoBackend) {
             throw new Error("End-to-end encryption disabled");
         }
         const storedKey = await this.secretStorage.get("m.megolm_backup.v1");
@@ -4193,9 +4193,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         }
 
         const room = this.getRoom(roomIdOrAlias);
-        if (room?.hasMembershipState(this.credentials.userId!, "join")) {
-            return Promise.resolve(room);
-        }
+        if (room?.hasMembershipState(this.credentials.userId!, "join")) return room;
 
         let signPromise: Promise<IThirdPartySigned | void> = Promise.resolve();
 
@@ -4220,6 +4218,12 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
         const res = await this.http.authedRequest<{ room_id: string }>(Method.Post, path, queryString, data);
 
         const roomId = res.room_id;
+        // In case we were originally given an alias, check the room cache again
+        // with the resolved ID - this method is supposed to no-op if we already
+        // were in the room, after all.
+        const resolvedRoom = this.getRoom(roomId);
+        if (resolvedRoom?.hasMembershipState(this.credentials.userId!, "join")) return resolvedRoom;
+
         const syncApi = new SyncApi(this, this.clientOpts, this.buildSyncApiOptions());
         const syncRoom = syncApi.createRoom(roomId);
         if (opts.syncRoom) {
