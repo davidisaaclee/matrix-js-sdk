@@ -282,10 +282,12 @@ export abstract class ReadReceipt<
      * what is available to the room at the time of execution.
      * @param userId - The user ID to check the read state of.
      * @param eventId - The event ID to check if the user read.
+     * @param ignoreSynthesized - Ignore synthesized receipts, e.g. those from
+     *   messages sent from this client?
      * @returns True if the user has read the event, false otherwise.
      */
-    public hasUserReadEvent(userId: string, eventId: string): boolean {
-        const readUpToId = this.getEventReadUpTo(userId, false);
+    public hasUserReadEvent(userId: string, eventId: string, ignoreSynthesized = false): boolean {
+        const readUpToId = this.getEventReadUpTo(userId, ignoreSynthesized);
         if (readUpToId === eventId) return true;
 
         if (
