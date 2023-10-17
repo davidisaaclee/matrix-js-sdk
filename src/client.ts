@@ -5746,6 +5746,11 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             // store contained everything we needed.
             return Promise.resolve(room);
         }
+        if (room.oldState.paginationToken === null) {
+            // store returned the final event in the scrollback
+            return Promise.resolve(room);
+        }
+
         // reduce the required number of events appropriately
         limit = limit - numAdded;
 
