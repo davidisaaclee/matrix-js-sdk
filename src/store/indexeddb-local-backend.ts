@@ -666,6 +666,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         // TODO: would be a nice lil test to check what happens when the same
         // chunk is `storeEvents`'d multiple times
         markReplacedStateEvents(events, room);
+        removeUnsignedAge(events);
         const nextStoredEventsChunk = ((): IMinimalEvent[] => {
             const out = [...(doc.chunks[start]?.events ?? []), ...events.map((e) => e.getEffectiveEvent())];
 
@@ -719,7 +720,12 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         }
 
         const filterObj = new FilterComponent(filter);
-        const timelineEvents = filterObj.filter(chunk.events.map(room.client.getEventMapper()));
+        const eventMapper = room.client.getEventMapper();
+        const reconstructEvent = (event: IMinimalEvent): MatrixEvent => {
+            reconstructAgeForEvent(event);
+            return eventMapper(event);
+        };
+        const timelineEvents = filterObj.filter(chunk.events.map(reconstructEvent));
 
         const shouldOmitEvent = (ev: MatrixEvent): boolean => {
             if (!ev.isState()) {
@@ -807,4 +813,44 @@ function markReplacedStateEvents(
             return;
         }
     });
+}
+
+const unsignedLocalTimestampKey = "local_timestamp";
+
+// `age` is only relevant to the request that fetched the event. When caching
+// an event in the store and fetching it later, this age is no longer helpful -
+// remove it.
+function removeUnsignedAge(events: MatrixEvent[]): void {
+    events.forEach((event) => {
+        event.event.unsigned = event.event.unsigned ?? {};
+
+        // Add `unsigned.local_timestamp`
+        // This mirrors the approach used by sync storage (although places the
+        // field in `unsigned` to be a better citizen):
+        // https://github.com/davidisaaclee/matrix-js-sdk/commit/d77af1e67aff73acb27ceb895aef8a66530b4f2a
+        const eventAgeForThisSession = event.getAge();
+        if (event.getUnsigned()[unsignedLocalTimestampKey] == null && eventAgeForThisSession != null) {
+            event.setUnsigned({
+                ...event.getUnsigned(),
+                [unsignedLocalTimestampKey]: Date.now() - eventAgeForThisSession,
+            });
+        }
+
+        // Delete `age`
+        if (event.event.unsigned?.age != null) {
+            delete event.event.unsigned.age;
+        }
+        // NB: In spec v1, age is stored in `event.age`. That is not handled
+        // here, but probably should be.
+    });
+}
+
+function reconstructAgeForEvent(event: IMinimalEvent): void {
+    if (event.unsigned == null) {
+        return;
+    }
+    const localTimestamp = event.unsigned[unsignedLocalTimestampKey];
+    if (localTimestamp != null && typeof localTimestamp === "number") {
+        event.unsigned.age = Date.now() - localTimestamp;
+    }
 }
