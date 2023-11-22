@@ -5722,8 +5722,8 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
      * pull in. Default: 30.
      * @param filter - Optional. A filter to set on the `/messages` request.
      * @returns Promise which resolves: Room. If you are at the beginning
-     * of the timeline, `Room.oldState.paginationToken` will be
-     * `null`.
+     * of the timeline, `Room.getLiveTimeline().getPaginationToken(Direction.Backward)`
+     * will be `null`.
      * @returns Rejects: with an error response.
      */
     public async scrollback(room: Room, limit = 30, filter?: IRoomEventFilter): Promise<Room> {
@@ -5737,7 +5737,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             timeToWaitMs = Math.max(SCROLLBACK_DELAY_MS - timeWaitedMs, 0);
         }
 
-        if (room.oldState.paginationToken === null) {
+        if (room.getLiveTimeline().getPaginationToken(Direction.Backward) === null) {
             return Promise.resolve(room); // already at the start.
         }
         // attempt to grab more events from the store first
@@ -5746,7 +5746,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
             // store contained everything we needed.
             return Promise.resolve(room);
         }
-        if (room.oldState.paginationToken === null) {
+        if (room.getLiveTimeline().getPaginationToken(Direction.Backward) === null) {
             // store returned the final event in the scrollback
             return Promise.resolve(room);
         }
@@ -5770,7 +5770,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                 .then(() => {
                     return this.createMessagesRequest(
                         room.roomId,
-                        room.oldState.paginationToken,
+                        room.getLiveTimeline().getPaginationToken(Direction.Backward),
                         limit,
                         Direction.Backward,
                         filterObj,
@@ -5791,10 +5791,12 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
                     this.processThreadEvents(room, threadedEvents, true);
                     unknownRelations.forEach((event) => room.relations.aggregateChildEvent(event));
 
-                    room.oldState.paginationToken = res.end ?? null;
-                    if (res.chunk.length === 0) {
-                        room.oldState.paginationToken = null;
+                    if (res.end == null || res.chunk.length === 0) {
+                        room.getLiveTimeline().setPaginationToken(null, Direction.Backward);
+                    } else {
+                        room.getLiveTimeline().setPaginationToken(res.end, Direction.Backward);
                     }
+
                     await this.store.storeEvents(
                         room,
                         matrixEvents,
