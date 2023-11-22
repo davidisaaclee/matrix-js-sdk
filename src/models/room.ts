@@ -1193,6 +1193,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
      * Removing just the old live timeline whilst preserving previous ones is not supported.
      */
     public resetLiveTimeline(backPaginationToken?: string | null, forwardPaginationToken?: string | null): void {
+        console.debug("resetLiveTimeline", backPaginationToken, forwardPaginationToken);
         for (const timelineSet of this.timelineSets) {
             timelineSet.resetLiveTimeline(backPaginationToken ?? undefined, forwardPaginationToken ?? undefined);
         }
@@ -1209,6 +1210,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
      * @internal
      */
     private fixUpLegacyTimelineFields(): void {
+        console.debug("fixUpLegacyTimelineFields");
         const previousOldState = this.oldState;
         const previousCurrentState = this.currentState;
 
