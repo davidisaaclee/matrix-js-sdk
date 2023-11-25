@@ -697,7 +697,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         room.addEventsToTimeline(events, true, room.getLiveTimeline(), end ?? undefined);
     }
 
-    public async scrollback(room: Room, limit: number, filter: IRoomEventFilter): Promise<MatrixEvent[]> {
+    public async scrollback(room: Room, limit: number, filter?: IRoomEventFilter): Promise<MatrixEvent[]> {
         const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
         console.debug("LocalIndexedDBStoreBackend: scrollback", {
             from,
@@ -724,13 +724,15 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
             return [];
         }
 
-        const filterObj = new FilterComponent(filter);
         const eventMapper = room.client.getEventMapper();
         const reconstructEvent = (event: IMinimalEvent): MatrixEvent => {
             reconstructAgeForEvent(event);
             return eventMapper(event);
         };
-        const timelineEvents = filterObj.filter(chunk.events.map(reconstructEvent));
+        let timelineEvents = chunk.events.map(reconstructEvent);
+        if (filter != null) {
+            timelineEvents = new FilterComponent(filter).filter(timelineEvents);
+        }
 
         const shouldOmitEvent = (ev: MatrixEvent): boolean => {
             if (!ev.isState()) {
