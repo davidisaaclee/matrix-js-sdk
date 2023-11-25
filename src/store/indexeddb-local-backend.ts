@@ -21,6 +21,7 @@ import { logger } from "../logger";
 import {
     Direction,
     EventTimeline,
+    IEvent,
     IRoomEventFilter,
     IStateEventWithRoomId,
     IStoredClientOpts,
@@ -40,7 +41,7 @@ interface MessagesChunksDocument {
     chunks: Record<
         string,
         {
-            events: IMinimalEvent[];
+            events: IEvent[];
             end: string | null;
         }
     >;
@@ -667,7 +668,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         // chunk is `storeEvents`'d multiple times
         markReplacedStateEvents(events, room);
         removeUnsignedAge(events);
-        const nextStoredEventsChunk = ((): IMinimalEvent[] => {
+        const nextStoredEventsChunk = ((): IEvent[] => {
             const out = [...(doc.chunks[start]?.events ?? []), ...events.map((e) => e.getEffectiveEvent())];
 
             // chunk is sorted with most recent event first (i.e. least origin_server_ts)
