@@ -699,9 +699,6 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
     public async scrollback(room: Room, limit: number, filter?: IRoomEventFilter): Promise<MatrixEvent[]> {
         const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
-        console.debug("LocalIndexedDBStoreBackend: scrollback", {
-            from,
-        });
         if (from == null) {
             // if `from` is null, we can't return a cached scrollback - for
             // example, this could mean that we just started the client, and new
@@ -714,7 +711,6 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         const store = tx.objectStore("messages_chunks");
         const request = await reqAsPromise(store.get(room.roomId));
         if (request.result == null) {
-            console.debug("LocalIndexedDBStoreBackend: scrollback", "cache miss", request.result);
             return [];
         }
 
@@ -754,11 +750,6 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
 
         // TODO: do thread stuff? see `MatrixClient#scrollback`
         room.addEventsToTimeline(eventsToAdd, true, room.getLiveTimeline(), chunk.end ?? undefined);
-        console.debug("LocalIndexedDBStoreBackend: scrollback", "add to timeline", {
-            passedToken: chunk.end,
-            effectiveToken: room.getLiveTimeline().getPaginationToken(Direction.Backward),
-            matches: chunk.end === room.getLiveTimeline().getPaginationToken(Direction.Backward),
-        });
 
         if (limit != null && timelineEvents.length > limit) {
             return timelineEvents.slice(0, limit);

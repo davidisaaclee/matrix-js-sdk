@@ -5753,11 +5753,6 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
 
         // reduce the required number of events appropriately
         limit = limit - numAdded;
-        console.debug("Client: scrollback needs network results", {
-            limit,
-            liveTimelineBackToken: room.getLiveTimeline().getPaginationToken(Direction.Backward),
-            oldStateToken: room.oldState.paginationToken,
-        });
 
         const promise = new Promise<Room>((resolve, reject) => {
             // Although /messages takes just a single filter, we need to make a
