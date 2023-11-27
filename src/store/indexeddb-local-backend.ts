@@ -18,43 +18,12 @@ import { IMinimalEvent, ISyncData, ISyncResponse, SyncAccumulator } from "../syn
 import { deepCopy, promiseTry } from "../utils";
 import { exists as idbExists } from "../indexeddb-helpers";
 import { logger } from "../logger";
-import {
-    Direction,
-    EventTimeline,
-    IRoomEventFilter,
-    IStateEventWithRoomId,
-    IStoredClientOpts,
-    MatrixEvent,
-    Room,
-} from "../matrix";
+import { IStateEventWithRoomId, IStoredClientOpts } from "../matrix";
 import { ISavedSync } from "./index";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
-import { FilterComponent } from "../filter-component";
 
 // A document in the `messages_chunks` store
-interface MessagesChunksDocument {
-    roomId: string;
-
-    // keyed by start token
-    chunks: Record<
-        string,
-        {
-            events: IMinimalEvent[];
-            end: string | null;
-        }
-    >;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-namespace
-namespace MessagesChunksDocument {
-    export function validate(x: unknown): MessagesChunksDocument {
-        // TODO: validate!
-        // @ts-ignore
-        return x;
-    }
-}
-
 type DbMigration = (db: IDBDatabase) => void;
 const DB_MIGRATIONS: DbMigration[] = [
     (db): void => {
@@ -178,11 +147,7 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
      * @param dbName - Optional database name. The same name must be used
      * to open the same database.
      */
-    public constructor(
-        private readonly indexedDB: IDBFactory,
-        dbName = "default",
-        private omitReplacedState: boolean | string[] = false,
-    ) {
+    public constructor(private readonly indexedDB: IDBFactory, dbName = "default") {
         this.dbName = "matrix-js-sdk:" + dbName;
         this.syncAccumulator = new SyncAccumulator();
     }
@@ -644,213 +609,10 @@ export class LocalIndexedDBStoreBackend implements IIndexedDBBackend {
         await txnAsPromise(txn);
     }
 
-    public async storeEvents(
-        room: Room,
-        events: MatrixEvent[],
-        start: string,
-        end: string | null,
-        toStart: boolean,
-    ): Promise<void> {
-        if (!toStart) {
-            throw new Error("LocalIndexedDBStoreBackend.storeEvents: toStart must be true");
-        }
-
-        const tx = this.db!.transaction(["messages_chunks"], "readwrite");
-        const store = tx.objectStore("messages_chunks");
-        const roomEventsRequest = await reqAsPromise(store.get(room.roomId));
-        const doc: MessagesChunksDocument =
-            roomEventsRequest.result == null
-                ? { roomId: room.roomId, chunks: {} }
-                : MessagesChunksDocument.validate(roomEventsRequest.result);
-
-        // TODO: would be a nice lil test to check what happens when the same
-        // chunk is `storeEvents`'d multiple times
-        markReplacedStateEvents(events, room);
-        removeUnsignedAge(events);
-        const nextStoredEventsChunk = ((): IMinimalEvent[] => {
-            const out = [...(doc.chunks[start]?.events ?? []), ...events.map((e) => e.getEffectiveEvent())];
-
-            // chunk is sorted with most recent event first (i.e. least origin_server_ts)
-            out.sort((a: any, b: any) => a.origin_server_ts - b.origin_server_ts);
-
-            // Remove duplicates
-            for (let i = 0; i < out.length; i++) {
-                if (out[i] == null) {
-                    break;
-                }
-                // @ts-ignore
-                while (out[i].event_id === out[i + 1]?.event_id) {
-                    out.splice(i + 1, 1);
-                }
-            }
-
-            return out;
-        })();
-        doc.chunks[start] = { events: nextStoredEventsChunk, end };
-
-        store.put(doc);
-
-        await txnAsPromise(tx);
-
-        // TODO: do thread stuff?
-        room.addEventsToTimeline(events, true, room.getLiveTimeline(), end ?? undefined);
-    }
-
-    public async scrollback(room: Room, limit: number, filter: IRoomEventFilter): Promise<MatrixEvent[]> {
-        const from = room.getLiveTimeline().getState(EventTimeline.BACKWARDS)?.paginationToken;
-        if (from == null) {
-            // if `from` is null, we can't return a cached scrollback - for
-            // example, this could mean that we just started the client, and new
-            // messages have come in at the new end of timeline since we last
-            // called `storeEvents`
-            return [];
-        }
-
-        const tx = this.db!.transaction(["messages_chunks"], "readonly");
-        const store = tx.objectStore("messages_chunks");
-        const request = await reqAsPromise(store.get(room.roomId));
-        if (request.result == null) {
-            return [];
-        }
-
-        const doc = MessagesChunksDocument.validate(request.result);
-        const chunk = doc.chunks[from];
-        if (chunk == null) {
-            return [];
-        }
-
-        const filterObj = new FilterComponent(filter);
-        const eventMapper = room.client.getEventMapper();
-        const reconstructEvent = (event: IMinimalEvent): MatrixEvent => {
-            reconstructAgeForEvent(event);
-            return eventMapper(event);
-        };
-        const timelineEvents = filterObj.filter(chunk.events.map(reconstructEvent));
-
-        const shouldOmitEvent = (ev: MatrixEvent): boolean => {
-            if (!ev.isState()) {
-                return false;
-            }
-            if (Array.isArray(this.omitReplacedState) && !this.omitReplacedState.includes(ev.getType())) {
-                return false;
-            }
-            return ev.getUnsigned().isObsoleteState;
-        };
-
-        const eventsToAdd = this.omitReplacedState
-            ? // If enabled, filter out replaced state events to make this faster.
-              // (e.g. rooms with many `m.call.member` events can be slow to
-              // scrollback.) The replaced events are still included in the return
-              // value of this list, just not inserted into the timeline.
-              timelineEvents.filter((ev) => !shouldOmitEvent(ev))
-            : timelineEvents;
-
-        // TODO: do thread stuff? see `MatrixClient#scrollback`
-        room.addEventsToTimeline(eventsToAdd, true, room.getLiveTimeline(), chunk.end ?? undefined);
-
-        if (limit != null && timelineEvents.length > limit) {
-            return timelineEvents.slice(0, limit);
-        } else {
-            return timelineEvents;
-        }
-    }
-
     /*
      * Close the database
      */
     public async destroy(): Promise<void> {
         this.db?.close();
-    }
-}
-
-/** Adds `isObsoleteState` field to unsigned data for replaced state events */
-function markReplacedStateEvents(
-    /** Must be in reverse-chronological order; must be being inserted at start of room timeline */
-    events: MatrixEvent[],
-    room: Room,
-): void {
-    // Since we're not inserting these events until after we're done
-    // filtering, we need to both check the state of the room *and* the
-    // events that we're planning to add as part of this batch - if
-    // we're adding redundant state relative to either of these, we
-    // should skip the event.
-    const currentRoomStateEvents = room.getLiveTimeline().getState(Direction.Backward)?.events;
-    const alreadyProcessedStateInThisBatch: { [eventType: string]: { [stateKey: string]: boolean } } = {};
-
-    events.forEach((event) => {
-        if (!event.isState()) {
-            return true;
-        }
-
-        const eventType = event.getType();
-        const stateKey = event.getStateKey();
-
-        // Just add it if we can't read the state key
-        if (stateKey == null) {
-            return;
-        }
-
-        if (alreadyProcessedStateInThisBatch[eventType]?.[stateKey]) {
-            // We already encountered this type-key tuple in this batch; skip
-            event.setUnsigned({
-                ...event.getUnsigned(),
-                isObsoleteState: true,
-            });
-            return;
-        }
-
-        // Regardless of whether we'll count this event, make sure to
-        // skip the next state event of this type-state_key tuple
-        alreadyProcessedStateInThisBatch[eventType] = alreadyProcessedStateInThisBatch[eventType] ?? {};
-        alreadyProcessedStateInThisBatch[eventType][stateKey] = true;
-
-        if (currentRoomStateEvents?.get(eventType)?.get(stateKey) != null) {
-            // We already have a state event under this key in the room, so don't add it again
-            event.setUnsigned({
-                ...event.getUnsigned(),
-                isObsoleteState: true,
-            });
-            return;
-        }
-    });
-}
-
-const unsignedLocalTimestampKey = "local_timestamp";
-
-// `age` is only relevant to the request that fetched the event. When caching
-// an event in the store and fetching it later, this age is no longer helpful -
-// remove it.
-function removeUnsignedAge(events: MatrixEvent[]): void {
-    events.forEach((event) => {
-        event.event.unsigned = event.event.unsigned ?? {};
-
-        // Add `unsigned.local_timestamp`
-        // This mirrors the approach used by sync storage (although places the
-        // field in `unsigned` to be a better citizen):
-        // https://github.com/davidisaaclee/matrix-js-sdk/commit/d77af1e67aff73acb27ceb895aef8a66530b4f2a
-        const eventAgeForThisSession = event.getAge();
-        if (event.getUnsigned()[unsignedLocalTimestampKey] == null && eventAgeForThisSession != null) {
-            event.setUnsigned({
-                ...event.getUnsigned(),
-                [unsignedLocalTimestampKey]: Date.now() - eventAgeForThisSession,
-            });
-        }
-
-        // Delete `age`
-        if (event.event.unsigned?.age != null) {
-            delete event.event.unsigned.age;
-        }
-        // NB: In spec v1, age is stored in `event.age`. That is not handled
-        // here, but probably should be.
-    });
-}
-
-function reconstructAgeForEvent(event: IMinimalEvent): void {
-    if (event.unsigned == null) {
-        return;
-    }
-    const localTimestamp = event.unsigned[unsignedLocalTimestampKey];
-    if (localTimestamp != null && typeof localTimestamp === "number") {
-        event.unsigned.age = Date.now() - localTimestamp;
     }
 }

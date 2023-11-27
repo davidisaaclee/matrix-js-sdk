@@ -18,7 +18,7 @@ import { logger } from "../logger";
 import { defer, IDeferred } from "../utils";
 import { ISavedSync } from "./index";
 import { IStoredClientOpts } from "../client";
-import { IRoomEventFilter, IStateEventWithRoomId, ISyncResponse, MatrixEvent, Room } from "../matrix";
+import { IStateEventWithRoomId, ISyncResponse } from "../matrix";
 import { IIndexedDBBackend, UserTuple } from "./indexeddb-backend";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
 
@@ -200,22 +200,6 @@ export class RemoteIndexedDBStoreBackend implements IIndexedDBBackend {
             logger.warn("Unrecognised message from worker: ", msg);
         }
     };
-
-    public storeEvents(
-        room: Room,
-        events: MatrixEvent[],
-        start: string,
-        end: string | null,
-        toStart: boolean,
-    ): Promise<void> {
-        // Not implemented
-        return Promise.resolve();
-    }
-
-    public scrollback(_room: Room, _limit: number, _filter: IRoomEventFilter): Promise<MatrixEvent[]> {
-        // Not implemented
-        return Promise.resolve([]);
-    }
 
     /*
      * Destroy the web worker

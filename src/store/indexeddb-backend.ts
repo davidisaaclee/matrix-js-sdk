@@ -15,15 +15,7 @@ limitations under the License.
 */
 
 import { ISavedSync } from "./index";
-import {
-    IEvent,
-    IRoomEventFilter,
-    IStateEventWithRoomId,
-    IStoredClientOpts,
-    ISyncResponse,
-    MatrixEvent,
-    Room,
-} from "../matrix";
+import { IEvent, IStateEventWithRoomId, IStoredClientOpts, ISyncResponse } from "../matrix";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
 
 export interface IIndexedDBBackend {
@@ -43,8 +35,6 @@ export interface IIndexedDBBackend {
     saveToDeviceBatches(batches: ToDeviceBatchWithTxnId[]): Promise<void>;
     getOldestToDeviceBatch(): Promise<IndexedToDeviceBatch | null>;
     removeToDeviceBatch(id: number): Promise<void>;
-    storeEvents(room: Room, events: MatrixEvent[], start: string, end: string | null, toStart: boolean): Promise<void>;
-    scrollback(room: Room, limit: number, filter?: IRoomEventFilter): Promise<MatrixEvent[]>;
     destroy(): Promise<void>;
 }
 

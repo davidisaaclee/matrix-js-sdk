@@ -20,7 +20,6 @@ import { MemoryStore, IOpts as IBaseOpts } from "./memory";
 import { LocalIndexedDBStoreBackend } from "./indexeddb-local-backend";
 import { RemoteIndexedDBStoreBackend } from "./indexeddb-remote-backend";
 import { User } from "../models/user";
-import { Room } from "../models/room";
 import { IEvent, MatrixEvent } from "../models/event";
 import { logger } from "../logger";
 import { ISavedSync } from "./index";
@@ -30,7 +29,6 @@ import { TypedEventEmitter } from "../models/typed-event-emitter";
 import { IStateEventWithRoomId } from "../@types/search";
 import { IndexedToDeviceBatch, ToDeviceBatchWithTxnId } from "../models/ToDeviceMessage";
 import { IStoredClientOpts } from "../client";
-import { IRoomEventFilter } from "../filter";
 
 /**
  * This is an internal module. See {@link IndexedDBStore} for the public class.
@@ -122,7 +120,7 @@ export class IndexedDBStore extends MemoryStore {
         if (opts.workerFactory) {
             this.backend = new RemoteIndexedDBStoreBackend(opts.workerFactory, opts.dbName);
         } else {
-            this.backend = new LocalIndexedDBStoreBackend(opts.indexedDB, opts.dbName, opts.omitReplacedState);
+            this.backend = new LocalIndexedDBStoreBackend(opts.indexedDB, opts.dbName);
         }
     }
 
@@ -383,20 +381,6 @@ export class IndexedDBStore extends MemoryStore {
 
     public removeToDeviceBatch(id: number): Promise<void> {
         return this.backend.removeToDeviceBatch(id);
-    }
-
-    public scrollback(room: Room, limit: number, filter?: IRoomEventFilter): Promise<MatrixEvent[]> {
-        return this.backend.scrollback(room, limit, filter);
-    }
-
-    public storeEvents(
-        room: Room,
-        events: MatrixEvent[],
-        start: string,
-        end: string | null,
-        toStart: boolean,
-    ): Promise<void> {
-        return this.backend.storeEvents(room, events, start, end, toStart);
     }
 }
 
