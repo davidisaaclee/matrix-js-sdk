@@ -154,6 +154,8 @@ describe("Thread", () => {
             },
             { overwriteRoutes: true },
         );
+
+        Thread.hasServerSideSupport = FeatureSupport.None;
     });
 
     describe("hasUserReadEvent", () => {
