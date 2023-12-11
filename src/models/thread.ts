@@ -160,15 +160,13 @@ export class Thread extends ReadReceipt<ThreadEmittedEvents, ThreadEventHandlerM
 
     private async fetchRootEvent(): Promise<void> {
         this.rootEvent = this.room.findEventById(this.id);
-        if (this.rootEvent == null) {
-            // If the rootEvent does not exist in the local stores, then fetch it from the server.
-            try {
-                const eventData = await this.client.fetchRoomEvent(this.roomId, this.id);
-                const mapper = this.client.getEventMapper();
-                this.rootEvent = mapper(eventData); // will merge with existing event object if such is known
-            } catch (e) {
-                logger.error("Failed to fetch thread root to construct thread with", e);
-            }
+        // If the rootEvent does not exist in the local stores, then fetch it from the server.
+        try {
+            const eventData = await this.client.fetchRoomEvent(this.roomId, this.id);
+            const mapper = this.client.getEventMapper();
+            this.rootEvent = mapper(eventData); // will merge with existing event object if such is known
+        } catch (e) {
+            logger.error("Failed to fetch thread root to construct thread with", e);
         }
         await this.processEvent(this.rootEvent);
     }
