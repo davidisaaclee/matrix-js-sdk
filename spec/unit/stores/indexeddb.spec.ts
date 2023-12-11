@@ -23,20 +23,6 @@ import { IndexedDBStore, IStateEventWithRoomId, MemoryStore, User, UserEvent } f
 import { emitPromise } from "../../test-utils/test-utils";
 import { LocalIndexedDBStoreBackend } from "../../../src/store/indexeddb-local-backend";
 import { defer } from "../../../src/utils";
-import { MatrixEvent } from "../../../src";
-
-function areMatrixEventsEquivalent(a: unknown, b: unknown): boolean {
-    if (a instanceof MatrixEvent && b instanceof MatrixEvent) {
-        return a.isEquivalentTo(b);
-    }
-    const isArrayOfMatrixEvents = (arr: unknown): arr is MatrixEvent[] =>
-        Array.isArray(arr) && arr.every((x) => x instanceof MatrixEvent);
-    if (isArrayOfMatrixEvents(a) && isArrayOfMatrixEvents(b)) {
-        return a.length === b.length && a.every((x, i) => x.isEquivalentTo(b[i]));
-    }
-    return false;
-}
-expect.addEqualityTesters([areMatrixEventsEquivalent]);
 
 describe("IndexedDBStore", () => {
     afterEach(() => {
