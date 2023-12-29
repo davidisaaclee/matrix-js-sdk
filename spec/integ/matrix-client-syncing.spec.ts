@@ -114,12 +114,13 @@ describe("MatrixClient syncing", () => {
             const roomId = "!cycles:example.org";
 
             // First sync: an invite
-            const inviteSyncRoomSection = {
+            const inviteSyncRoomSection = (ts: number) => ({
                 invite: {
                     [roomId]: {
                         invite_state: {
                             events: [
                                 {
+                                    origin_server_ts: ts,
                                     type: "m.room.member",
                                     state_key: selfUserId,
                                     content: {
@@ -130,10 +131,10 @@ describe("MatrixClient syncing", () => {
                         },
                     },
                 },
-            };
+            });
             httpBackend!.when("GET", "/sync").respond(200, {
                 ...syncData,
-                rooms: inviteSyncRoomSection,
+                rooms: inviteSyncRoomSection(1),
             });
 
             // Second sync: a leave (reject of some kind)
@@ -148,6 +149,7 @@ describe("MatrixClient syncing", () => {
                             state: {
                                 events: [
                                     {
+                                        origin_server_ts: 2,
                                         type: "m.room.member",
                                         state_key: selfUserId,
                                         content: {
@@ -164,6 +166,7 @@ describe("MatrixClient syncing", () => {
                                 limited: false,
                                 events: [
                                     {
+                                        origin_server_ts: 2,
                                         type: "m.room.member",
                                         state_key: selfUserId,
                                         content: {
@@ -184,7 +187,7 @@ describe("MatrixClient syncing", () => {
             // Third sync: another invite
             httpBackend!.when("GET", "/sync").respond(200, {
                 ...syncData,
-                rooms: inviteSyncRoomSection,
+                rooms: inviteSyncRoomSection(3),
             });
 
             // First fire: an initial invite
@@ -229,7 +232,7 @@ describe("MatrixClient syncing", () => {
             const roomId = "!cycles:example.org";
 
             // First sync: an knock
-            const knockSyncRoomSection = {
+            const knockSyncRoomSection = (originServerTs: number) => ({
                 knock: {
                     [roomId]: {
                         knock_state: {
@@ -240,15 +243,16 @@ describe("MatrixClient syncing", () => {
                                     content: {
                                         membership: "knock",
                                     },
+                                    origin_server_ts: originServerTs,
                                 },
                             ],
                         },
                     },
                 },
-            };
+            });
             httpBackend!.when("GET", "/sync").respond(200, {
                 ...syncData,
-                rooms: knockSyncRoomSection,
+                rooms: knockSyncRoomSection(1),
             });
 
             // Second sync: a leave (reject of some kind)
@@ -263,6 +267,7 @@ describe("MatrixClient syncing", () => {
                             state: {
                                 events: [
                                     {
+                                        origin_server_ts: 2,
                                         type: "m.room.member",
                                         state_key: selfUserId,
                                         content: {
@@ -279,6 +284,7 @@ describe("MatrixClient syncing", () => {
                                 limited: false,
                                 events: [
                                     {
+                                        origin_server_ts: 2,
                                         type: "m.room.member",
                                         state_key: selfUserId,
                                         content: {
@@ -299,7 +305,7 @@ describe("MatrixClient syncing", () => {
             // Third sync: another knock
             httpBackend!.when("GET", "/sync").respond(200, {
                 ...syncData,
-                rooms: knockSyncRoomSection,
+                rooms: knockSyncRoomSection(3),
             });
 
             // First fire: an initial knock
@@ -694,6 +700,8 @@ describe("MatrixClient syncing", () => {
         const msgText = "some text here";
         const otherDisplayName = "Bob Smith";
 
+        let currentTs = 0;
+
         const syncData = {
             rooms: {
                 join: {
@@ -710,6 +718,7 @@ describe("MatrixClient syncing", () => {
                         state: {
                             events: [
                                 utils.mkEvent({
+                                    ts: ++currentTs,
                                     type: "m.room.name",
                                     room: roomOne,
                                     user: otherUserId,
@@ -779,6 +788,7 @@ describe("MatrixClient syncing", () => {
                         state: {
                             events: [
                                 utils.mkEvent({
+                                    ts: ++currentTs,
                                     type: "m.room.name",
                                     room: roomOne,
                                     user: selfUserId,
