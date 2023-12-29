@@ -30,7 +30,7 @@ import { User } from "./models/user";
 import { NotificationCountType, Room, RoomEvent } from "./models/room";
 import { deepCopy, defer, IDeferred, noUnsafeEventProps, promiseMapSeries, unsafeProp } from "./utils";
 import { Filter } from "./filter";
-import { EventTimeline } from "./models/event-timeline";
+import { Direction, EventTimeline } from "./models/event-timeline";
 import { logger } from "./logger";
 import { InvalidStoreError, InvalidStoreState } from "./errors";
 import { ClientEvent, IStoredClientOpts, MatrixClient, PendingEventOrdering, ResetTimelineCallback } from "./client";
@@ -54,13 +54,14 @@ import { MatrixError, Method } from "./http-api";
 import { ISavedSync } from "./store";
 import { EventType } from "./@types/event";
 import { IPushRules } from "./@types/PushRules";
-import { RoomStateEvent, IMarkerFoundOptions } from "./models/room-state";
+import { RoomState, RoomStateEvent, IMarkerFoundOptions } from "./models/room-state";
 import { RoomMemberEvent } from "./models/room-member";
 import { BeaconEvent } from "./models/beacon";
 import { IEventsResponse } from "./@types/requests";
 import { UNREAD_THREAD_NOTIFICATIONS } from "./@types/sync";
 import { Feature, ServerSupport } from "./feature";
 import { Crypto } from "./crypto";
+import { guessOrderBasedOnTimestamp } from "./models/compare-event-ordering";
 
 const DEBUG = true;
 
@@ -1828,8 +1829,66 @@ export class SyncApi {
             // XXX: As above, don't do this...
             //room.addLiveEvents(stateEventList || []);
             // Do this instead...
-            room.oldState.setStateEvents(stateEventList || []);
-            room.currentState.setStateEvents(stateEventList || []);
+
+            // These orderings rely on event timestamps, which is flawed:
+            // https://github.com/matrix-org/matrix-js-sdk/issues/3325
+            // We also can't use `Room#compareEventOrdering` because these events
+            // have not yet been added to the Room, which causes that function
+            // to fail.
+            const compareEventOrdering = guessOrderBasedOnTimestamp;
+
+            const roomStateWillUpdateByEvent = (
+                room: Room,
+                incomingStateEvent: MatrixEvent,
+                direction: Direction,
+            ): boolean => {
+                // Only add events to currentState which are still relevent -
+                // i.e. that do not have an existing currentState event which
+                // has a *later* timestamp
+                let roomState: RoomState;
+                switch (direction) {
+                    case Direction.Backward:
+                        roomState = room.oldState;
+                        break;
+                    case Direction.Forward:
+                        roomState = room.currentState;
+                        break;
+                }
+                const existingEvent = roomState.getStateEvents(
+                    incomingStateEvent.getType(),
+                    incomingStateEvent.getStateKey()!,
+                );
+                if (existingEvent) {
+                    // `order` will be negative if the existing event is more recent
+                    const order = compareEventOrdering(incomingStateEvent, existingEvent);
+                    switch (direction) {
+                        case Direction.Backward:
+                            // For old state, the incoming event only takes
+                            // effect if the existing event is more recent.
+                            return order < 0;
+
+                        case Direction.Forward:
+                            // For current state, the incoming event only takes
+                            // effect if the existing event is less recent.
+                            //
+                            // If the ordering is equal, it's a toss-up whether we
+                            // should replace. In many cases, we can rely on the order
+                            // in which this method was called - so let's assume that
+                            // this incoming event is more recent.
+                            return order >= 0;
+                    }
+                }
+
+                // If no existing event, this new state event is definitely relevant
+                return true;
+            };
+
+            room.oldState.setStateEvents(
+                (stateEventList || []).filter((ev) => roomStateWillUpdateByEvent(room, ev, Direction.Backward)),
+            );
+            room.currentState.setStateEvents(
+                (stateEventList || []).filter((ev) => roomStateWillUpdateByEvent(room, ev, Direction.Forward)),
+            );
         }
 
         // Execute the timeline events. This will continue to diverge the current state

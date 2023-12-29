@@ -126,7 +126,7 @@ function compareEventsInThreads(
  *
  * See https://github.com/matrix-org/matrix-js-sdk/issues/3325
  */
-function guessOrderBasedOnTimestamp(leftEvent: MatrixEvent, rightEvent: MatrixEvent): number {
+export function guessOrderBasedOnTimestamp(leftEvent: MatrixEvent, rightEvent: MatrixEvent): number {
     const leftTs = leftEvent.getTs();
     const rightTs = rightEvent.getTs();
     if (leftTs < rightTs) {
