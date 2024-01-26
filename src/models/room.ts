@@ -68,6 +68,7 @@ import { ReadReceipt, synthesizeReceipt } from "./read-receipt";
 import { isPollEvent, Poll, PollEvent } from "./poll";
 import { RoomReceipts } from "./room-receipts";
 import { compareEventOrdering } from "./compare-event-ordering";
+import { mark } from "../mark";
 
 // These constants are used as sane defaults when the homeserver doesn't support
 // the m.room_versions capability. In practice, KNOWN_SAFE_ROOM_VERSION should be
@@ -3731,16 +3732,4 @@ function memberNamesToRoomName(names: string[], count: number): string {
             return `${names[0]} and 1 other`;
         }
     }
-}
-
-const __marks: Record<string, DOMHighResTimeStamp> = {};
-function mark(label: string, debugLabel: string): void {
-    const now = performance.now();
-    if (__marks[label] != null) {
-        const dur = now - __marks[label];
-        if (dur > 10) {
-            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
-        }
-    }
-    __marks[label] = now;
 }

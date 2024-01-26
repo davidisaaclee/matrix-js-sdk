@@ -24,6 +24,7 @@ import { TypedEventEmitter } from "./typed-event-emitter";
 import { RelationsContainer } from "./relations-container";
 import { MatrixClient } from "../client";
 import { Thread, ThreadFilterType } from "./thread";
+import { mark } from "../mark";
 
 interface IOpts {
     // Set to true to enable improved timeline support.
@@ -1011,16 +1012,4 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
 
         return shouldLiveInRoom;
     }
-}
-
-const __marks: Record<string, DOMHighResTimeStamp> = {};
-function mark(label: string, debugLabel: string): void {
-    const now = performance.now();
-    if (__marks[label] != null) {
-        const dur = now - __marks[label];
-        if (dur > 10) {
-            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
-        }
-    }
-    __marks[label] = now;
 }

@@ -20,6 +20,7 @@ import { EventTimelineSet } from "./event-timeline-set";
 import { MatrixEvent } from "./event";
 import { Filter } from "../filter";
 import { EventType } from "../@types/event";
+import { mark } from "../mark";
 
 export interface IInitialiseStateOptions extends Pick<IMarkerFoundOptions, "timelineWasEmpty"> {
     // This is a separate interface without any extra stuff currently added on
@@ -502,16 +503,4 @@ export class EventTimeline {
     public toString(): string {
         return this.name;
     }
-}
-
-const __marks: Record<string, DOMHighResTimeStamp> = {};
-function mark(label: string, debugLabel: string): void {
-    const now = performance.now();
-    if (__marks[label] != null) {
-        const dur = now - __marks[label];
-        if (dur > 10) {
-            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
-        }
-    }
-    __marks[label] = now;
 }
