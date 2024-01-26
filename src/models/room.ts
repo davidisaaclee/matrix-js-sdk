@@ -3720,3 +3720,12 @@ function memberNamesToRoomName(names: string[], count: number): string {
         }
     }
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function measure(log: (duration: DOMHighResTimeStamp) => void, fn: () => Promise<void>): Promise<void> {
+    const start = performance.now();
+    const out = await fn();
+    const end = performance.now();
+    log(end - start);
+    return out;
+}
