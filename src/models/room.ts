@@ -2429,9 +2429,11 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
      * Fires {@link RoomEvent.Timeline}
      */
     private addLiveEvent(event: MatrixEvent, addLiveEventOptions: IAddLiveEventOptions): void {
+        const _mark = (x: string): void => mark(event.getId()!, x);
         const { duplicateStrategy, timelineWasEmpty, fromCache } = addLiveEventOptions;
 
         // add to our timeline sets
+        _mark("addLiveEvent.start");
         for (const timelineSet of this.timelineSets) {
             timelineSet.addLiveEvent(event, {
                 duplicateStrategy,
@@ -2439,6 +2441,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
                 timelineWasEmpty,
             });
         }
+        _mark("addLiveEvent.end");
 
         // synthesize and inject implicit read receipts
         // Done after adding the event because otherwise the app would get a read receipt
@@ -2454,6 +2457,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
             // they are no longer currently active anyway. So don't bother to
             // reset the lastActiveAgo and lastPresenceTs from the RoomState's user.
         }
+        _mark("addReceipt");
     }
 
     /**
@@ -2878,10 +2882,10 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
 
             if (shouldLiveInRoom) {
                 this.addLiveEvent(event, options);
-                _mark(`addLiveEvent ${JSON.stringify(event.event)}`);
+                _mark(`addLiveEvent`);
             } else if (!shouldLiveInThread && event.isRelation()) {
                 this.relations.aggregateChildEvent(event);
-                _mark(`aggregateChildEvent ${JSON.stringify(event.event)}`);
+                _mark(`aggregateChildEvent`);
             }
         }
 
