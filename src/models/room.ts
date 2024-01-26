@@ -2824,8 +2824,11 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
         const neighbouringEvents = [...events];
 
         for (const event of events) {
+            const _mark = (x: string): void => mark(event.getId()!, x);
+            _mark("start");
             // TODO: We should have a filter to say "only add state event types X Y Z to the timeline".
             this.processLiveEvent(event);
+            _mark("processLiveEvent");
 
             if (event.getUnsigned().transaction_id) {
                 const existingEvent = this.txnToEvent.get(event.getUnsigned().transaction_id!);
@@ -2835,12 +2838,14 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
                     continue; // we can skip adding the event to the timeline sets, it is already there
                 }
             }
+            _mark("txnId");
 
             let { shouldLiveInRoom, shouldLiveInThread, threadId } = this.eventShouldLiveIn(
                 event,
                 neighbouringEvents,
                 threadRoots,
             );
+            _mark("eventShouldLiveIn");
 
             if (!shouldLiveInThread && !shouldLiveInRoom && event.isRelation()) {
                 try {
@@ -2864,6 +2869,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
                     logger.error("Failed to load parent event of unhandled relation", e);
                 }
             }
+            _mark("non-thread relation");
 
             if (shouldLiveInThread && !eventsByThread[threadId ?? ""]) {
                 eventsByThread[threadId ?? ""] = [];
@@ -2875,6 +2881,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
             } else if (!shouldLiveInThread && event.isRelation()) {
                 this.relations.aggregateChildEvent(event);
             }
+            _mark("addLiveEvent");
         }
 
         Object.entries(eventsByThread).forEach(([threadId, threadEvents]) => {
@@ -3721,11 +3728,14 @@ function memberNamesToRoomName(names: string[], count: number): string {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function measure(log: (duration: DOMHighResTimeStamp) => void, fn: () => Promise<void>): Promise<void> {
-    const start = performance.now();
-    const out = await fn();
-    const end = performance.now();
-    log(end - start);
-    return out;
+const __marks: Record<string, DOMHighResTimeStamp> = {};
+function mark(label: string, debugLabel: string): void {
+    const now = performance.now();
+    if (__marks[label] != null) {
+        const dur = now - __marks[label];
+        if (dur > 10) {
+            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
+        }
+    }
+    __marks[label] = now;
 }
