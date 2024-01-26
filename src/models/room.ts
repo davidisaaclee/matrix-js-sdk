@@ -2878,10 +2878,11 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
 
             if (shouldLiveInRoom) {
                 this.addLiveEvent(event, options);
+                _mark(`addLiveEvent ${JSON.stringify(event.event)}`);
             } else if (!shouldLiveInThread && event.isRelation()) {
                 this.relations.aggregateChildEvent(event);
+                _mark(`aggregateChildEvent ${JSON.stringify(event.event)}`);
             }
-            _mark("addLiveEvent");
         }
 
         Object.entries(eventsByThread).forEach(([threadId, threadEvents]) => {
