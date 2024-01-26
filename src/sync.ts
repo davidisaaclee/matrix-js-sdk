@@ -1895,10 +1895,15 @@ export class SyncApi {
         // if the timeline has any state events in it.
         // This also needs to be done before running push rules on the events as they need
         // to be decorated with sender etc.
+        const start = performance.now();
         await room.addLiveEvents(timelineEventList || [], {
             fromCache,
             timelineWasEmpty,
         });
+        const dur = performance.now() - start;
+        if (dur > 1000) {
+            console.debug("addLiveEvents took", dur, arguments);
+        }
         this.client.processBeaconEvents(room, timelineEventList);
     }
 
