@@ -2823,59 +2823,64 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
         // List of extra events to check for being parents of any relations encountered
         const neighbouringEvents = [...events];
 
-        for (const event of events) {
-            // TODO: We should have a filter to say "only add state event types X Y Z to the timeline".
-            this.processLiveEvent(event);
+        measure(
+            (dur) => dur > 1000 && console.debug("Iterating events took", dur),
+            async () => {
+                for (const event of events) {
+                    // TODO: We should have a filter to say "only add state event types X Y Z to the timeline".
+                    this.processLiveEvent(event);
 
-            if (event.getUnsigned().transaction_id) {
-                const existingEvent = this.txnToEvent.get(event.getUnsigned().transaction_id!);
-                if (existingEvent) {
-                    // remote echo of an event we sent earlier
-                    this.handleRemoteEcho(event, existingEvent);
-                    continue; // we can skip adding the event to the timeline sets, it is already there
-                }
-            }
-
-            let { shouldLiveInRoom, shouldLiveInThread, threadId } = this.eventShouldLiveIn(
-                event,
-                neighbouringEvents,
-                threadRoots,
-            );
-
-            if (!shouldLiveInThread && !shouldLiveInRoom && event.isRelation()) {
-                try {
-                    const parentEvent = new MatrixEvent(
-                        await this.client.fetchRoomEvent(this.roomId, event.relationEventId!),
-                    );
-                    neighbouringEvents.push(parentEvent);
-                    if (parentEvent.threadRootId) {
-                        threadRoots.add(parentEvent.threadRootId);
-                        const unsigned = event.getUnsigned();
-                        unsigned[UNSIGNED_THREAD_ID_FIELD.name] = parentEvent.threadRootId;
-                        event.setUnsigned(unsigned);
+                    if (event.getUnsigned().transaction_id) {
+                        const existingEvent = this.txnToEvent.get(event.getUnsigned().transaction_id!);
+                        if (existingEvent) {
+                            // remote echo of an event we sent earlier
+                            this.handleRemoteEcho(event, existingEvent);
+                            continue; // we can skip adding the event to the timeline sets, it is already there
+                        }
                     }
 
-                    ({ shouldLiveInRoom, shouldLiveInThread, threadId } = this.eventShouldLiveIn(
+                    let { shouldLiveInRoom, shouldLiveInThread, threadId } = this.eventShouldLiveIn(
                         event,
                         neighbouringEvents,
                         threadRoots,
-                    ));
-                } catch (e) {
-                    logger.error("Failed to load parent event of unhandled relation", e);
+                    );
+
+                    if (!shouldLiveInThread && !shouldLiveInRoom && event.isRelation()) {
+                        try {
+                            const parentEvent = new MatrixEvent(
+                                await this.client.fetchRoomEvent(this.roomId, event.relationEventId!),
+                            );
+                            neighbouringEvents.push(parentEvent);
+                            if (parentEvent.threadRootId) {
+                                threadRoots.add(parentEvent.threadRootId);
+                                const unsigned = event.getUnsigned();
+                                unsigned[UNSIGNED_THREAD_ID_FIELD.name] = parentEvent.threadRootId;
+                                event.setUnsigned(unsigned);
+                            }
+
+                            ({ shouldLiveInRoom, shouldLiveInThread, threadId } = this.eventShouldLiveIn(
+                                event,
+                                neighbouringEvents,
+                                threadRoots,
+                            ));
+                        } catch (e) {
+                            logger.error("Failed to load parent event of unhandled relation", e);
+                        }
+                    }
+
+                    if (shouldLiveInThread && !eventsByThread[threadId ?? ""]) {
+                        eventsByThread[threadId ?? ""] = [];
+                    }
+                    eventsByThread[threadId ?? ""]?.push(event);
+
+                    if (shouldLiveInRoom) {
+                        this.addLiveEvent(event, options);
+                    } else if (!shouldLiveInThread && event.isRelation()) {
+                        this.relations.aggregateChildEvent(event);
+                    }
                 }
-            }
-
-            if (shouldLiveInThread && !eventsByThread[threadId ?? ""]) {
-                eventsByThread[threadId ?? ""] = [];
-            }
-            eventsByThread[threadId ?? ""]?.push(event);
-
-            if (shouldLiveInRoom) {
-                this.addLiveEvent(event, options);
-            } else if (!shouldLiveInThread && event.isRelation()) {
-                this.relations.aggregateChildEvent(event);
-            }
-        }
+            },
+        );
 
         Object.entries(eventsByThread).forEach(([threadId, threadEvents]) => {
             this.addThreadedEvents(threadId, threadEvents, false);
@@ -3719,4 +3724,13 @@ function memberNamesToRoomName(names: string[], count: number): string {
             return `${names[0]} and 1 other`;
         }
     }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function measure<T extends Promise<any>>(log: (duration: DOMHighResTimeStamp) => void, fn: () => T): T {
+    const start = performance.now();
+    const out = await fn();
+    const end = performance.now();
+    log(end - start);
+    return out;
 }
