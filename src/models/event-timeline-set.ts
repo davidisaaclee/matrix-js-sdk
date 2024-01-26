@@ -691,6 +691,10 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
         fromCache = false,
         roomState?: RoomState,
     ): void {
+        const _mark = (x: string): void => mark(event.getId()!, x);
+
+        _mark("addEventToTimeline.preamble");
+
         let toStartOfTimeline = !!toStartOfTimelineOrOpts;
         let timelineWasEmpty: boolean | undefined;
         if (typeof toStartOfTimelineOrOpts === "object") {
@@ -711,9 +715,11 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
                 "in timelineSet(threadId=${this.thread?.id})`);
         }
 
+        _mark("addEventToTimeline.start");
         const eventId = event.getId()!;
         this.relations.aggregateParentEvent(event);
         this.relations.aggregateChildEvent(event, this);
+        _mark("addEventToTimeline.aggregate");
 
         // Make sure events don't get mixed in timelines they shouldn't be in (e.g. a
         // threaded message should not be in the main timeline).
@@ -731,19 +737,23 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
             );
             return;
         }
+        _mark("addEventToTimeline.canContain check");
 
         timeline.addEvent(event, {
             toStartOfTimeline,
             roomState,
             timelineWasEmpty,
         });
+        _mark("addEventToTimeline.timeline.addEvent");
         this._eventIdToTimeline.set(eventId, timeline);
+        _mark("addEventToTimeline  this._eventIdToTimeline.set(eventId, timeline)");
 
         const data: IRoomTimelineData = {
             timeline: timeline,
             liveEvent: !toStartOfTimeline && timeline == this.liveTimeline && !fromCache,
         };
         this.emit(RoomEvent.Timeline, event, this.room, Boolean(toStartOfTimeline), false, data);
+        _mark("addEventToTimeline emit Timeline");
     }
 
     /**
@@ -1001,4 +1011,16 @@ export class EventTimelineSet extends TypedEventEmitter<EmittedEvents, EventTime
 
         return shouldLiveInRoom;
     }
+}
+
+const __marks: Record<string, DOMHighResTimeStamp> = {};
+function mark(label: string, debugLabel: string): void {
+    const now = performance.now();
+    if (__marks[label] != null) {
+        const dur = now - __marks[label];
+        if (dur > 10) {
+            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
+        }
+    }
+    __marks[label] = now;
 }

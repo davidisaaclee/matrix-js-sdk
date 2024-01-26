@@ -2441,7 +2441,7 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
                 timelineWasEmpty,
             });
         }
-        _mark("addLiveEvent.end");
+        _mark(`addLiveEvent.end (${this.timelineSets.length} timelines)`);
 
         // synthesize and inject implicit read receipts
         // Done after adding the event because otherwise the app would get a read receipt

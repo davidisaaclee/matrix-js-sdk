@@ -371,6 +371,9 @@ export class EventTimeline {
         toStartOfTimelineOrOpts: boolean | IAddEventOptions,
         roomState?: RoomState,
     ): void {
+        const _mark = (x: string): void => mark(event.getId()!, x);
+
+        _mark("EventTimeline.addEvent::preamble");
         let toStartOfTimeline = !!toStartOfTimelineOrOpts;
         let timelineWasEmpty: boolean | undefined;
         if (typeof toStartOfTimelineOrOpts === "object") {
@@ -391,12 +394,15 @@ export class EventTimeline {
 
         const timelineSet = this.getTimelineSet();
 
+        _mark("EventTimeline.addEvent::start");
         if (timelineSet.room) {
             EventTimeline.setEventMetadata(event, roomState!, toStartOfTimeline);
+            _mark("EventTimeline.addEvent::setEventMetadata");
 
             // modify state but only on unfiltered timelineSets
             if (event.isState() && timelineSet.room.getUnfilteredTimelineSet() === timelineSet) {
                 roomState?.setStateEvents([event], { timelineWasEmpty });
+                _mark("EventTimeline.addEvent::setStateEvents");
                 // it is possible that the act of setting the state event means we
                 // can set more metadata (specifically sender/target props), so try
                 // it again if the prop wasn't previously set. It may also mean that
@@ -409,6 +415,7 @@ export class EventTimeline {
                 // member event itself.
                 if (!event.sender || (event.getType() === EventType.RoomMember && !toStartOfTimeline)) {
                     EventTimeline.setEventMetadata(event, roomState!, toStartOfTimeline);
+                    _mark("EventTimeline.addEvent::setEventMetadata (seocnd time?)");
                 }
             }
         }
@@ -422,6 +429,7 @@ export class EventTimeline {
         }
 
         this.events.splice(insertIndex, 0, event); // insert element
+        _mark("EventTimeline.addEvent::splice");
         if (toStartOfTimeline) {
             this.baseIndex++;
         }
@@ -494,4 +502,16 @@ export class EventTimeline {
     public toString(): string {
         return this.name;
     }
+}
+
+const __marks: Record<string, DOMHighResTimeStamp> = {};
+function mark(label: string, debugLabel: string): void {
+    const now = performance.now();
+    if (__marks[label] != null) {
+        const dur = now - __marks[label];
+        if (dur > 10) {
+            console.debug(`mark ${label} ${debugLabel} took ${dur}ms`);
+        }
+    }
+    __marks[label] = now;
 }
