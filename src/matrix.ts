@@ -110,7 +110,7 @@ export { LocationAssetType } from "./@types/location";
  * The most important is {@link Crypto.CryptoApi}, an instance of which can be retrieved via
  * {@link MatrixClient.getCrypto}.
  */
-export * as Crypto from "./crypto-api";
+// export * as Crypto from "./crypto-api";
 
 /**
  * Backwards compatibility re-export
