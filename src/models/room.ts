@@ -64,7 +64,7 @@ import {
 } from "../@types/read_receipts";
 import { IStateEventWithRoomId } from "../@types/search";
 import { RelationsContainer } from "./relations-container";
-import { ReadReceipt, synthesizeReceipt } from "./read-receipt";
+import { ReadReceipt } from "./read-receipt";
 import { isPollEvent, Poll, PollEvent } from "./poll";
 import { RoomReceipts } from "./room-receipts";
 import { compareEventOrdering } from "./compare-event-ordering";
@@ -2438,21 +2438,6 @@ export class Room extends ReadReceipt<RoomEmittedEvents, RoomEventHandlerMap> {
                 fromCache,
                 timelineWasEmpty,
             });
-        }
-
-        // synthesize and inject implicit read receipts
-        // Done after adding the event because otherwise the app would get a read receipt
-        // pointing to an event that wasn't yet in the timeline
-        // Don't synthesize RR for m.room.redaction as this causes the RR to go missing.
-        if (event.sender && event.getType() !== EventType.RoomRedaction) {
-            this.addReceipt(synthesizeReceipt(event.sender.userId, event, ReceiptType.Read), true);
-
-            // Any live events from a user could be taken as implicit
-            // presence information: evidence that they are currently active.
-            // ...except in a world where we use 'user.currentlyActive' to reduce
-            // presence spam, this isn't very useful - we'll get a transition when
-            // they are no longer currently active anyway. So don't bother to
-            // reset the lastActiveAgo and lastPresenceTs from the RoomState's user.
         }
     }
 
